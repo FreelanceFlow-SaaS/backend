@@ -4,9 +4,14 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { GoldenRuleExceptionFilter } from './common/filters/golden-rule-exception.filter';
 import { GoldenRuleInterceptor } from './common/interceptors/golden-rule.interceptor';
+import * as cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Enable cookie parser for HttpOnly refresh tokens
+  app.use(cookieParser());
+
 
   // ✅ Golden Rule: Global validation pipe - liberal in accepting, conservative in sending
   app.useGlobalPipes(
