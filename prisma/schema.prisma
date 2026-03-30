@@ -1,0 +1,152 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String             @id @default(uuid()) @db.Uuid
+  email        String             @unique
+  passwordHash String             @map("password_hash")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  clients      Client[]
+  profile      FreelancerProfile?
+  invoices     Invoice[]
+  services     Service[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model FreelancerProfile {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  displayName  String   @map("display_name")
+  legalName    String   @map("legal_name")
+  companyName  String?  @map("company_name")
+  addressLine1 String   @map("address_line1")
+  addressLine2 String?  @map("address_line2")
+  postalCode   String   @map("postal_code")
+  city         String
+  country      String   @default("FR")
+  vatNumber    String?  @map("vat_number")
+  siret        String?
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("freelancer_profiles")
+}
+
+model Client {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  name      String
+  email     String
+  company   String
+  address   String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices  Invoice[]
+
+  @@index([userId])
+  @@map("clients")
+}
+
+model Service {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  title        String
+  hourlyRateHt Decimal       @map("hourly_rate_ht") @db.Decimal(12, 2)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  lines        InvoiceLine[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("services")
+}
+
+model Invoice {
+  id            String               @id @default(uuid()) @db.Uuid
+  userId        String               @map("user_id") @db.Uuid
+  clientId      String               @map("client_id") @db.Uuid
+  invoiceNumber String               @map("invoice_number")
+  status        InvoiceStatus        @default(draft)
+  issueDate     DateTime             @map("issue_date") @db.Date
+  dueDate       DateTime?            @map("due_date") @db.Date
+  currency      String               @default("EUR") @db.Char(3)
+  totalHt       Decimal              @map("total_ht") @db.Decimal(12, 2)
+  totalVat      Decimal              @map("total_vat") @db.Decimal(12, 2)
+  totalTtc      Decimal              @map("total_ttc") @db.Decimal(12, 2)
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  lines         InvoiceLine[]
+  events        InvoiceStatusEvent[]
+  client        Client               @relation(fields: [clientId], references: [id])
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, invoiceNumber])
+  @@index([userId])
+  @@index([clientId])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id          String   @id @default(uuid()) @db.Uuid
+  invoiceId   String   @map("invoice_id") @db.Uuid
+  serviceId   String?  @map("service_id") @db.Uuid
+  lineOrder   Int      @map("line_order")
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPriceHt Decimal  @map("unit_price_ht") @db.Decimal(12, 2)
+  vatRate     Decimal  @map("vat_rate") @db.Decimal(5, 4)
+  lineHt      Decimal  @map("line_ht") @db.Decimal(12, 2)
+  lineVat     Decimal  @map("line_vat") @db.Decimal(12, 2)
+  lineTtc     Decimal  @map("line_ttc") @db.Decimal(12, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  service     Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_lines")
+}
+
+model InvoiceStatusEvent {
+  id         String         @id @default(uuid()) @db.Uuid
+  invoiceId  String         @map("invoice_id") @db.Uuid
+  fromStatus InvoiceStatus? @map("from_status")
+  toStatus   InvoiceStatus  @map("to_status")
+  changedAt  DateTime       @default(now()) @map("changed_at")
+  invoice    Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("invoice_status_events")
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  cancelled
+}
+
+
+// Refresh token storage for secure JWT implementation
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
