@@ -4,6 +4,21 @@ NestJS backend for the FreelanceFlow invoicing platform, targeting the French fr
 
 ---
 
+## Table of Contents
+
+- [Requirements](#requirements)
+- [Environment Variables](#environment-variables)
+- [Local Development](#local-development)
+- [Scripts](#scripts)
+- [Docker](#docker)
+- [API Endpoints](#api-endpoints)
+- [Architecture](#architecture)
+- [Database Schema](#database-schema)
+- [Git Workflow](#git-workflow)
+- [License](#license)
+
+---
+
 ## Requirements
 
 - Node.js 22+
