@@ -279,3 +279,9 @@ Reinstall hooks after a fresh clone:
 ```bash
 npm run prepare
 ```
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE) for details.
