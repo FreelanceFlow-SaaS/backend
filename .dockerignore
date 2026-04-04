@@ -1,0 +1,33 @@
+# Dependencies — reinstalled inside the image
+node_modules
+
+# Build output — rebuilt inside the image
+dist
+*.tsbuildinfo
+
+# Local environment — secrets must be injected at runtime, never baked in
+.env
+.env.local
+.env*.local
+
+# Test files
+test
+**/*.spec.ts
+**/*.e2e-spec.ts
+coverage
+
+# Dev tooling
+.husky
+.eslintrc*
+.prettierrc*
+jest.config.*
+
+# Git
+.git
+.gitignore
+
+# Docs / planning
+README.md
+CLAUDE.md
+GIT-HOOKS.md
+_bmad-output

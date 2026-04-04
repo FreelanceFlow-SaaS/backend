@@ -1,228 +1,298 @@
-# FreelanceFlow Backend API
+# FreelanceFlow API
 
-Enterprise-grade NestJS backend API for French freelance invoicing SaaS platform.
+NestJS backend for the FreelanceFlow invoicing platform, targeting the French freelance market. Handles authentication, client and service management, invoice lifecycle, PDF generation, and structured audit logging.
 
-## Tech Stack
+---
 
-### Core Framework
-- **NestJS** - Progressive Node.js framework with TypeScript
-- **TypeScript** - Type-safe JavaScript development
-- **Node.js** - JavaScript runtime environment
+## Requirements
 
-### Database & ORM
-- **Neon PostgreSQL** - Serverless PostgreSQL database
-- **Prisma ORM** - Next-generation database toolkit
-- **Database Migrations** - Automated schema management
+- Node.js 22+
+- PostgreSQL (or a [Neon](https://neon.tech) serverless PostgreSQL project)
 
-### Authentication & Security
-- **JWT (JSON Web Tokens)** - Stateless authentication
-- **HttpOnly Cookies** - XSS-resistant token storage
-- **Refresh Token Rotation** - Enhanced security pattern
-- **bcryptjs** - Password hashing
-- **Passport.js** - Authentication middleware
-
-### API & Documentation
-- **Swagger/OpenAPI** - Interactive API documentation
-- **Class Validator** - Request validation with French error messages
-- **Class Transformer** - Data transformation and serialization
-
-### Code Quality & DevOps
-- **ESLint** - TypeScript linting with custom rules
-- **Prettier** - Code formatting
-- **Husky** - Git hooks for pre-commit quality checks
-- **Jest** - Testing framework
-- **Docker** - Containerization for production deployment
-
-### Architecture Patterns
-- **Modular Architecture** - Domain-driven design with feature modules
-- **Golden Rule API Design** - Liberal in accepting, conservative in sending
-- **Dependency Injection** - NestJS IoC container
-- **Global Exception Filters** - Centralized error handling
-
-## Project Structure
-
-```
-src/
-├── main.ts                 # Application bootstrap
-├── app.module.ts           # Root application module
-├── common/                 # Shared utilities and infrastructure
-│   ├── prisma/            # Database service (global module)
-│   ├── filters/           # Global exception filters
-│   └── interceptors/      # Response transformation
-└── modules/               # Feature-based modules
-    ├── auth/              # JWT authentication & authorization
-    ├── users/             # User management & freelancer profiles
-    ├── clients/           # Client directory management
-    ├── services/          # Service catalog (prestations)
-    ├── invoices/          # Invoice creation & management
-    └── pdf/               # PDF generation for invoices
-```
-
-## Database Schema
-
-The application uses 8 PostgreSQL tables with proper relations:
-
-- **users** - Authentication and tenant boundary
-- **freelancer_profiles** - Seller information for invoices
-- **clients** - Client directory per user
-- **services** - Reusable service catalog with hourly rates
-- **invoices** - Invoice headers with computed totals
-- **invoice_lines** - Line items with VAT calculations
-- **invoice_status_events** - Audit trail for status changes
-- **refresh_tokens** - Secure JWT refresh token storage
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+ and npm
-- PostgreSQL database (or Neon account)
-
-### Installation
-
-1. Clone the repository
-```bash
-git clone https://github.com/FreelanceFlow-SaaS/backend.git
-cd backend
-```
-
-2. Install dependencies
-```bash
-npm install
-```
-
-3. Setup environment variables
-```bash
-cp .env.example .env
-# Update DATABASE_URL with your PostgreSQL connection string
-# Update JWT_SECRET with a secure random string
-```
-
-4. Run database migrations
-```bash
-npm run prisma:migrate
-```
-
-5. Start development server
-```bash
-npm run start:dev
-```
-
-The API will be available at `http://localhost:3001`
-
-### API Documentation
-
-Interactive API documentation is available at:
-- **Swagger UI**: `http://localhost:3001/api/docs`
-
-## Available Scripts
-
-### Development
-- `npm run start:dev` - Start development server with hot reload
-- `npm run start:debug` - Start with debug mode enabled
-
-### Building
-- `npm run build` - Build the application for production
-- `npm run start:prod` - Start production server
-
-### Database
-- `npm run prisma:generate` - Generate Prisma client
-- `npm run prisma:migrate` - Run database migrations
-- `npm run prisma:studio` - Open Prisma Studio database GUI
-
-### Code Quality
-- `npm run lint` - Run ESLint with auto-fix
-- `npm run format` - Format code with Prettier
-- `npm run test` - Run unit tests
-- `npm run test:e2e` - Run end-to-end tests
-
-## Authentication Flow
-
-The API implements a secure JWT-based authentication system:
-
-1. **Registration/Login** - Returns access token (15min) and sets refresh token cookie (7 days)
-2. **API Access** - Use access token in Authorization header or HttpOnly cookie
-3. **Token Refresh** - Automatic refresh using HttpOnly refresh token
-4. **Logout** - Revokes refresh tokens and clears cookies
+---
 
 ## Environment Variables
 
-Required environment variables (see `.env.example`):
+Copy `.env.example` to `.env` and fill in the values before starting the server.
 
 ```bash
-# Application
 PORT=3001
 NODE_ENV=development
 
-# Database
-DATABASE_URL="postgresql://username:password@host:port/database"
+DATABASE_URL="postgresql://user:password@host:5432/dbname"
 
-# JWT Configuration
-JWT_SECRET="your-secure-secret-key"
+JWT_SECRET="change-this-to-a-long-random-string"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 
-# CORS
 FRONTEND_URL="http://localhost:3000"
+
+# Optional — defaults to "debug" in development, "info" in production
+LOG_LEVEL=debug
 ```
 
-## Docker Deployment
+`DATABASE_URL` must point to the **direct** connection endpoint, not a pooler. See [Known Issues](#known-issues).
 
-Build and run with Docker:
+---
+
+## Local Development
 
 ```bash
-# Build image
-docker build -t freelanceflow-api .
-
-# Run container
-docker run -p 3001:3001 --env-file .env freelanceflow-api
+npm install
+npm run prisma:generate   # generate Prisma client
+npm run prisma:push       # push schema to DB (first time or after schema changes)
+npm run start:dev         # hot-reload server on port 3001
 ```
 
-## Contributing
+Swagger UI: `http://localhost:3001/api/docs`
 
-This project uses conventional commits and has automated quality checks:
+Health check: `GET http://localhost:3001/api/v1/health`
 
-1. **Commit Format**: `type(scope): description`
-   - Examples: `feat: add user authentication`, `fix(auth): resolve token expiration`
+---
 
-2. **Pre-commit Hooks**: Automatically run on every commit
-   - ESLint validation and auto-fix
-   - Prettier code formatting
-   - Related unit tests
+## Scripts
 
-3. **Pre-push Hooks**: Run full test suite and build verification
+**Development**
+
+```bash
+npm run start:dev         # hot-reload
+npm run start:debug       # hot-reload with Node inspector
+```
+
+**Build**
+
+```bash
+npm run build             # compile to dist/
+npm run start:prod        # run compiled output
+```
+
+**Database**
+
+```bash
+npm run prisma:generate   # regenerate Prisma client after schema changes
+npm run prisma:migrate    # create and run a migration (dev only)
+npm run prisma:push       # push schema without a migration file (prototyping)
+npm run prisma:studio     # open Prisma Studio GUI
+```
+
+**Testing**
+
+```bash
+npm run test              # all unit tests
+npm run test:watch        # watch mode
+npm run test:cov          # with coverage report
+npm run test:e2e          # end-to-end tests against a real database
+npm run test:staged       # tests related to staged files (used by pre-commit hook)
+
+# Single file
+npx jest src/modules/auth/auth.service.spec.ts
+```
+
+**Code Quality**
+
+```bash
+npm run lint              # ESLint with auto-fix
+npm run format            # Prettier
+```
+
+---
+
+## Docker
+
+```bash
+# Build
+docker build -t freelanceflow-api .
+
+# Run (inject secrets at runtime — never bake .env into the image)
+docker run -p 3001:3001 \
+  -e DATABASE_URL="..." \
+  -e JWT_SECRET="..." \
+  -e NODE_ENV=production \
+  freelanceflow-api
+```
+
+The container starts by running `prisma migrate deploy` (idempotent) before launching the server. The health endpoint at `/api/v1/health` is used as the liveness probe.
+
+---
 
 ## API Endpoints
 
+All routes are prefixed with `/api/v1`. Protected routes require a valid JWT access token in the `Authorization: Bearer <token>` header (also accepted via HttpOnly cookie after login).
+
+**Auth** — no authentication required
+
+```
+POST   /auth/register
+POST   /auth/login
+POST   /auth/refresh
+POST   /auth/logout
+```
+
+**Freelancer Profile**
+
+```
+GET    /users/profile
+PATCH  /users/profile
+```
+
+**Clients**
+
+```
+POST   /clients
+GET    /clients
+GET    /clients/:id
+PATCH  /clients/:id
+DELETE /clients/:id
+```
+
+**Services**
+
+```
+POST   /services
+GET    /services
+GET    /services/:id
+PATCH  /services/:id
+DELETE /services/:id
+```
+
+**Invoices**
+
+```
+POST   /invoices
+GET    /invoices
+GET    /invoices/:id
+PATCH  /invoices/:id
+PUT    /invoices/:id/lines
+PATCH  /invoices/:id/status
+DELETE /invoices/:id
+```
+
+**PDF**
+
+```
+GET    /pdf/invoices/:id
+```
+
+**Health**
+
+```
+GET    /health
+```
+
+---
+
+## Architecture
+
+### Request Lifecycle
+
+Every request passes through three globally registered concerns:
+
+1. **`ValidationPipe`** — `whitelist: true` strips unknown fields; `transform: true` coerces types.
+2. **`GoldenRuleInterceptor`** — strips sensitive fields (`passwordHash`, `refreshToken`, `tokenHash`) from all outgoing responses.
+3. **`GoldenRuleExceptionFilter`** — catches all exceptions, returns a consistent `{ statusCode, message, error, timestamp, path }` shape with French error messages.
+
+### Module Structure
+
+```
+src/
+├── main.ts
+├── app.module.ts
+├── common/
+│   ├── health/               # GET /health liveness endpoint
+│   ├── prisma/               # PrismaService — global module
+│   ├── logger/               # nestjs-pino configuration
+│   ├── filters/              # GoldenRuleExceptionFilter
+│   ├── interceptors/         # GoldenRuleInterceptor
+│   └── testing/              # Shared test helpers (mock logger)
+└── modules/
+    ├── auth/                 # JWT auth, HttpOnly cookies, refresh token rotation
+    ├── users/                # User CRUD, FreelancerProfile upsert
+    ├── clients/              # Client directory (per-user)
+    ├── services/             # Service catalog with hourly rates
+    ├── invoices/             # Invoice headers, line items, status transitions
+    └── pdf/                  # pdfmake PDF generation
+```
+
 ### Authentication
-- `POST /api/v1/auth/register` - User registration
-- `POST /api/v1/auth/login` - User login
-- `POST /api/v1/auth/refresh` - Token refresh
-- `POST /api/v1/auth/logout` - User logout
 
-### Users & Profiles
-- `GET /api/v1/users/profile` - Get freelancer profile
-- `PATCH /api/v1/users/profile` - Update freelancer profile
+- Access token: 15 min, returned in the response body (development only) and set as an HttpOnly cookie (`path: /`).
+- Refresh token: 7 days, HttpOnly cookie (`path: /api/v1/auth`), stored hashed in `refresh_tokens`.
+- Token rotation: each `/auth/refresh` atomically deletes the old token and issues a new one.
 
-### Feature Modules (Ready for Implementation)
-- `/api/v1/clients/*` - Client management
-- `/api/v1/services/*` - Service catalog
-- `/api/v1/invoices/*` - Invoice management with French VAT
-- `/api/v1/pdf/*` - PDF generation
+### Multi-tenancy
 
-## French Business Compliance
+Every resource (`Client`, `Service`, `Invoice`) has a `userId` foreign key. All queries are scoped to the authenticated user's ID. A request for another user's resource returns 404, not 403, to avoid leaking existence.
 
-The API is designed for the French market with:
+### Invoice Lifecycle
 
-- **EUR currency** enforcement throughout
-- **HT/VAT/TTC calculations** for proper French invoicing
-- **French error messages** for better user experience
-- **Decimal precision** for monetary amounts (no floating point)
+```
+draft --> sent --> paid
+  |         |
+  v         v
+cancelled cancelled
+```
 
-## License
+Paid and cancelled are terminal states. Line items on non-draft invoices are immutable. Invoice numbers are generated atomically via a PostgreSQL `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` sequence to eliminate race conditions.
 
-This project is proprietary software for FreelanceFlow SaaS platform.
+### Logging
 
-## Support
+Structured JSON logging via `nestjs-pino`. PII fields (`Authorization` header, cookies, passwords) are redacted before any log is written. Business events (`user_login_success`, `user_login_failure`, `token_refresh`, etc.) carry a machine-readable `event` field for log aggregation queries. `pino-pretty` is active in development; raw JSON goes to stdout in production.
 
-For technical questions or issues, please contact the development team.
+---
+
+## Database Schema
+
+Nine PostgreSQL tables, all using UUID primary keys:
+
+| Table                   | Purpose                                                                    |
+| ----------------------- | -------------------------------------------------------------------------- |
+| `users`                 | Authentication credentials and tenant boundary                             |
+| `freelancer_profiles`   | Seller identity and legal details for invoices                             |
+| `clients`               | Client directory, one per user                                             |
+| `services`              | Reusable service catalog with hourly rate                                  |
+| `invoices`              | Invoice header with pre-computed HT / VAT / TTC totals                     |
+| `invoice_lines`         | Line items; `unitPriceHt` is snapshotted from the service at creation time |
+| `invoice_status_events` | Immutable audit trail of status transitions                                |
+| `invoice_counters`      | Per-user atomic sequence for invoice number generation                     |
+| `refresh_tokens`        | Hashed refresh tokens for revocation                                       |
+
+All monetary values use `Decimal(12,2)`. VAT rates use `Decimal(5,4)` (e.g., `0.2000` for 20%). Currency is enforced as EUR.
+
+---
+
+## Git Workflow
+
+Feature branches follow the pattern `feature/<name>` and target `main`.
+
+Commit format enforced by commit-msg hook: `type(scope): description`
+
+Valid types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `ci`, `build`
+
+Hook pipeline:
+
+- **pre-commit**: Prettier + ESLint auto-fix + unit tests for staged files
+- **commit-msg**: Conventional commit format check
+- **pre-push**: Full test suite + build
+
+Reinstall hooks after a fresh clone:
+
+```bash
+npm run prepare
+```
+
+---
+
+## Known Issues
+
+**Neon database — use the direct connection, not the pooler**
+
+Neon provides two endpoints. The pooler (`ep-...-pooler.region.neon.tech`) runs PgBouncer in transaction mode, which does not preserve `search_path` between sessions. Prisma queries fail at runtime with "table does not exist" even though the table is present. Use the direct endpoint (no `-pooler` in the hostname) for `DATABASE_URL`.
+
+**Prisma CLI broken symlink**
+
+`npm run prisma:*` scripts may fail with a missing `.wasm` file due to a broken symlink in `node_modules/.bin/`. Use the build entrypoint directly if needed:
+
+```bash
+node node_modules/prisma/build/index.js generate --schema=./prisma/schema.prisma
+node node_modules/prisma/build/index.js db push --schema=./prisma/schema.prisma
+```

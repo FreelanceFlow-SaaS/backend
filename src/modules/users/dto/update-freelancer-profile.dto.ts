@@ -1,82 +1,71 @@
-import { IsString, IsOptional, Length } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, Length, IsNotEmpty } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateFreelancerProfileDto {
-  @ApiProperty({
-    description: 'Display name for invoices',
-    example: 'Sophie Martin',
-  })
+  @ApiPropertyOptional({ example: 'Sophie Martin', description: 'Nom affiché sur les factures' })
   @IsString()
-  displayName: string;
-
-  @ApiProperty({
-    description: 'Legal name',
-    example: 'Sophie Marie Martin',
-  })
-  @IsString()
-  legalName: string;
-
-  @ApiPropertyOptional({
-    description: 'Company name (optional)',
-    example: 'SophieDev SARL',
-  })
+  @IsNotEmpty({ message: 'Le nom affiché ne peut pas être vide' })
   @IsOptional()
+  displayName?: string;
+
+  @ApiPropertyOptional({ example: 'Sophie Marie Martin', description: 'Nom légal complet' })
   @IsString()
+  @IsNotEmpty({ message: 'Le nom légal ne peut pas être vide' })
+  @IsOptional()
+  legalName?: string;
+
+  @ApiPropertyOptional({ example: 'SophieDev SARL', description: 'Nom de la société (optionnel)' })
+  @IsString()
+  @IsOptional()
   companyName?: string;
 
-  @ApiProperty({
-    description: 'Address line 1',
-    example: '123 rue de la Paix',
-  })
+  @ApiPropertyOptional({ example: '123 rue de la Paix', description: 'Adresse ligne 1' })
   @IsString()
-  addressLine1: string;
-
-  @ApiPropertyOptional({
-    description: 'Address line 2 (optional)',
-    example: 'Appartement 4B',
-  })
+  @IsNotEmpty({ message: "L'adresse ne peut pas être vide" })
   @IsOptional()
+  addressLine1?: string;
+
+  @ApiPropertyOptional({ example: 'Appartement 4B', description: 'Adresse ligne 2 (optionnel)' })
   @IsString()
+  @IsOptional()
   addressLine2?: string;
 
-  @ApiProperty({
-    description: 'Postal code',
-    example: '75001',
-  })
+  @ApiPropertyOptional({ example: '75001', description: 'Code postal (5 caractères)' })
   @IsString()
-  @Length(5, 5)
-  postalCode: string;
+  @Length(5, 5, { message: 'Le code postal doit contenir 5 caractères' })
+  @IsOptional()
+  postalCode?: string;
 
-  @ApiProperty({
-    description: 'City',
-    example: 'Paris',
-  })
+  @ApiPropertyOptional({ example: 'Paris', description: 'Ville' })
   @IsString()
-  city: string;
-
-  @ApiProperty({
-    description: 'Country code',
-    example: 'FR',
-    default: 'FR',
-  })
-  @IsString()
-  @Length(2, 2)
-  country: string;
+  @IsNotEmpty({ message: 'La ville ne peut pas être vide' })
+  @IsOptional()
+  city?: string;
 
   @ApiPropertyOptional({
-    description: 'VAT number (optional for V1)',
-    example: 'FR12345678901',
+    example: 'FR',
+    default: 'FR',
+    description: 'Code pays ISO 3166-1 alpha-2 (2 caractères)',
   })
-  @IsOptional()
   @IsString()
+  @Length(2, 2, { message: 'Le code pays doit contenir 2 caractères (ex: FR)' })
+  @IsOptional()
+  country?: string;
+
+  @ApiPropertyOptional({
+    example: 'FR12345678901',
+    description: 'Numéro de TVA intracommunautaire (optionnel)',
+  })
+  @IsString()
+  @IsOptional()
   vatNumber?: string;
 
   @ApiPropertyOptional({
-    description: 'SIRET number (optional for V1)',
     example: '12345678901234',
+    description: 'Numéro SIRET (14 chiffres, optionnel)',
   })
-  @IsOptional()
   @IsString()
-  @Length(14, 14)
+  @Length(14, 14, { message: 'Le numéro SIRET doit contenir 14 chiffres' })
+  @IsOptional()
   siret?: string;
 }

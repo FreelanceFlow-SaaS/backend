@@ -1,16 +1,72 @@
-import { Controller } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Request,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ClientsService } from './clients.service';
+import { CreateClientDto } from './dto/create-client.dto';
+import { UpdateClientDto } from './dto/update-client.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('Clients')
+@ApiBearerAuth('jwt')
 @Controller('clients')
+@UseGuards(JwtAuthGuard)
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
-  // TODO: Implement CRUD endpoints for clients
-  // - GET /clients (list user's clients)
-  // - POST /clients (create client)
-  // - GET /clients/:id (get client by id)
-  // - PATCH /clients/:id (update client)
-  // - DELETE /clients/:id (delete client)
+  @Post()
+  @ApiOperation({ summary: 'Créer un nouveau client' })
+  @ApiResponse({ status: 201, description: 'Client créé avec succès.' })
+  @ApiResponse({ status: 400, description: 'Données invalides.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  async create(@Request() req: any, @Body() dto: CreateClientDto) {
+    return this.clientsService.create(req.user.id, dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: "Lister tous les clients de l'utilisateur" })
+  @ApiResponse({ status: 200, description: 'Liste des clients.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  async findAll(@Request() req: any) {
+    return this.clientsService.findAll(req.user.id);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtenir un client par son identifiant' })
+  @ApiResponse({ status: 200, description: 'Client trouvé.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  @ApiResponse({ status: 404, description: 'Client introuvable.' })
+  async findOne(@Request() req: any, @Param('id') id: string) {
+    return this.clientsService.findOne(id, req.user.id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Mettre à jour un client' })
+  @ApiResponse({ status: 200, description: 'Client mis à jour.' })
+  @ApiResponse({ status: 400, description: 'Données invalides.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  @ApiResponse({ status: 404, description: 'Client introuvable.' })
+  async update(@Request() req: any, @Param('id') id: string, @Body() dto: UpdateClientDto) {
+    return this.clientsService.update(id, req.user.id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Supprimer un client' })
+  @ApiResponse({ status: 204, description: 'Client supprimé.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  @ApiResponse({ status: 404, description: 'Client introuvable.' })
+  async remove(@Request() req: any, @Param('id') id: string) {
+    return this.clientsService.remove(id, req.user.id);
+  }
 }

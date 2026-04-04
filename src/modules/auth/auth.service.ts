@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcryptjs';
 import { Response } from 'express';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -14,23 +15,23 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    @InjectPinoLogger(AuthService.name)
+    private readonly logger: PinoLogger
   ) {}
 
-  async register(createUserDto: CreateUserDto): Promise<{ access_token: string; user: Partial<User> }> {
+  async register(
+    createUserDto: CreateUserDto
+  ): Promise<{ access_token: string; user: Partial<User> }> {
     // Check if user already exists
     const existingUser = await this.usersService.findByEmail(createUserDto.email);
     if (existingUser) {
       throw new ConflictException('Un utilisateur avec cet email existe déjà');
     }
 
-    // Hash password
-    const hashedPassword = await hash(createUserDto.password, 12);
+    // Create user (UsersService.create handles password hashing)
+    const user = await this.usersService.create(createUserDto);
 
-    // Create user
-    const user = await this.usersService.create({
-      ...createUserDto,
-      password: hashedPassword,
-    });
+    this.logger.info({ event: 'user_register_success', userId: user.id }, 'user registered');
 
     // Generate JWT
     const payload = { email: user.email, sub: user.id };
@@ -46,16 +47,24 @@ export class AuthService {
     };
   }
 
-  async login(loginDto: LoginDto, res: Response): Promise<{ access_token: string; user: Partial<User> }> {
+  async login(
+    loginDto: LoginDto,
+    res: Response
+  ): Promise<{ access_token: string; user: Partial<User> }> {
     // Find user by email
     const user = await this.usersService.findByEmail(loginDto.email);
     if (!user) {
+      this.logger.warn({ event: 'user_login_failure', reason: 'user_not_found' }, 'login failed');
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
     // Verify password
     const isPasswordValid = await compare(loginDto.password, user.passwordHash);
     if (!isPasswordValid) {
+      this.logger.warn(
+        { event: 'user_login_failure', userId: user.id, reason: 'wrong_password' },
+        'login failed'
+      );
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
@@ -75,6 +84,8 @@ export class AuthService {
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
       },
     });
+
+    this.logger.info({ event: 'user_login_success', userId: user.id }, 'user logged in');
 
     // Set refresh token as HttpOnly cookie
     res.cookie('refreshToken', refreshToken, {
@@ -102,7 +113,7 @@ export class AuthService {
     try {
       // Verify refresh token
       const decoded = this.jwtService.verify(refreshToken);
-      
+
       if (decoded.sub !== userId) {
         throw new UnauthorizedException('Token invalide');
       }
@@ -119,6 +130,7 @@ export class AuthService {
         sameSite: 'strict',
       });
 
+      this.logger.info({ event: 'user_logout', userId }, 'user logged out');
       return { message: 'Déconnexion réussie' };
     } catch (error) {
       // Clear cookie anyway in case of invalid token
@@ -144,9 +156,9 @@ export class AuthService {
 
       // Check if token exists in database
       const storedTokens = await this.prisma.refreshToken.findMany({
-        where: { 
+        where: {
           userId,
-          expiresAt: { gt: new Date() }
+          expiresAt: { gt: new Date() },
         },
       });
 
@@ -186,6 +198,8 @@ export class AuthService {
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         },
       });
+
+      this.logger.info({ event: 'token_refresh', userId }, 'token refreshed');
 
       // Set new refresh token cookie
       res.cookie('refreshToken', newRefreshToken, {

@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { User } from './user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateFreelancerProfileDto } from './dto/update-freelancer-profile.dto';
 import { hash } from 'bcryptjs';
+
+const USER_WITH_PROFILE = { profile: true } as const;
 
 @Injectable()
 export class UsersService {
@@ -11,15 +13,10 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     const hashedPassword = await hash(createUserDto.password, 12);
-    
+
     const user = await this.prisma.user.create({
-      data: {
-        email: createUserDto.email,
-        passwordHash: hashedPassword,
-      },
-      include: {
-        profile: true,
-      },
+      data: { email: createUserDto.email, passwordHash: hashedPassword },
+      include: USER_WITH_PROFILE,
     });
 
     return user as User;
@@ -28,68 +25,44 @@ export class UsersService {
   async findByEmail(email: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({
       where: { email },
-      include: {
-        profile: true,
-      },
+      include: USER_WITH_PROFILE,
     });
-
     return user as User | null;
   }
 
   async findById(id: string): Promise<User | null> {
     const user = await this.prisma.user.findUnique({
       where: { id },
-      include: {
-        profile: true,
-      },
+      include: USER_WITH_PROFILE,
     });
-
     return user as User | null;
-  }
-
-  async updateProfile(userId: string, updateData: UpdateFreelancerProfileDto): Promise<User> {
-    // Check if profile exists, create or update accordingly
-    const existingProfile = await this.prisma.freelancerProfile.findUnique({
-      where: { userId },
-    });
-
-    if (existingProfile) {
-      await this.prisma.freelancerProfile.update({
-        where: { userId },
-        data: updateData,
-      });
-    } else {
-      await this.prisma.freelancerProfile.create({
-        data: {
-          ...updateData,
-          userId,
-        },
-      });
-    }
-
-    // Return updated user with profile
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        profile: true,
-      },
-    });
-
-    return user as User;
   }
 
   async getProfile(userId: string): Promise<User> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: {
-        profile: true,
-      },
+      include: USER_WITH_PROFILE,
+    });
+    if (!user) throw new NotFoundException('Utilisateur introuvable');
+    return user as User;
+  }
+
+  async updateProfile(userId: string, updateData: UpdateFreelancerProfileDto): Promise<User> {
+    // Verify user exists before upserting profile
+    const exists = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!exists) throw new NotFoundException('Utilisateur introuvable');
+
+    await this.prisma.freelancerProfile.upsert({
+      where: { userId },
+      update: updateData,
+
+      create: { ...updateData, user: { connect: { id: userId } } } as any,
     });
 
-    if (!user) {
-      throw new Error('User not found');
-    }
-
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: USER_WITH_PROFILE,
+    });
     return user as User;
   }
 }

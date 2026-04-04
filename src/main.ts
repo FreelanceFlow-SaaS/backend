@@ -1,33 +1,30 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
-import { GoldenRuleExceptionFilter } from './common/filters/golden-rule-exception.filter';
-import { GoldenRuleInterceptor } from './common/interceptors/golden-rule.interceptor';
-import * as cookieParser from 'cookie-parser';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+
+  // Wire nestjs-pino as the NestJS logger (replaces default console logger)
+  app.useLogger(app.get(Logger));
 
   // Enable cookie parser for HttpOnly refresh tokens
   app.use(cookieParser());
 
-
   // ✅ Golden Rule: Global validation pipe - liberal in accepting, conservative in sending
+  // Note: GoldenRuleExceptionFilter and GoldenRuleInterceptor are registered in AppModule
+  // via APP_FILTER / APP_INTERCEPTOR so they receive DI (PinoLogger injection).
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,          // ✅ Strip unknown properties (be liberal in accepting)
-      forbidNonWhitelisted: false, // ✅ Don't throw errors for extra fields
-      transform: true,          // ✅ Transform and sanitize input
-      skipMissingProperties: false, // ✅ Validate required fields strictly
-    }),
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true,
+      skipMissingProperties: false,
+    })
   );
-
-  // ✅ Golden Rule: Global exception filter with French error messages
-  app.useGlobalFilters(new GoldenRuleExceptionFilter());
-
-  // ✅ Golden Rule: Global interceptor for response sanitization  
-  app.useGlobalInterceptors(new GoldenRuleInterceptor());
 
   // CORS configuration for frontend
   app.enableCors({
@@ -41,7 +38,9 @@ async function bootstrap() {
   // Swagger/OpenAPI setup
   const config = new DocumentBuilder()
     .setTitle('FreelanceFlow API')
-    .setDescription('French-market SaaS for freelance invoicing - Following the Golden Rule: Liberal in accepting, Conservative in sending')
+    .setDescription(
+      'French-market SaaS for freelance invoicing - Following the Golden Rule: Liberal in accepting, Conservative in sending'
+    )
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -52,7 +51,7 @@ async function bootstrap() {
         description: 'Enter JWT token',
         in: 'header',
       },
-      'jwt',
+      'jwt'
     )
     .addCookieAuth('refreshToken', {
       type: 'http',
@@ -66,10 +65,12 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  
-  console.log(`🚀 FreelanceFlow API running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
-  console.log(`✨ Golden Rule: Liberal in accepting, Conservative in sending`);
+
+  const logger = app.get(Logger);
+  logger.log(
+    { event: 'server_start', port, env: process.env.NODE_ENV ?? 'development' },
+    'FreelanceFlow API started'
+  );
 }
 
 bootstrap();

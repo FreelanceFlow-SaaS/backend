@@ -13,11 +13,12 @@ model User {
   passwordHash String             @map("password_hash")
   createdAt    DateTime           @default(now()) @map("created_at")
   updatedAt    DateTime           @updatedAt @map("updated_at")
-  clients      Client[]
-  profile      FreelancerProfile?
-  invoices     Invoice[]
-  services     Service[]
-  refreshTokens RefreshToken[]
+  clients        Client[]
+  profile        FreelancerProfile?
+  invoices       Invoice[]
+  services       Service[]
+  refreshTokens  RefreshToken[]
+  invoiceCounter InvoiceCounter?
 
   @@map("users")
 }
@@ -135,6 +136,16 @@ enum InvoiceStatus {
   cancelled
 }
 
+
+// Per-user invoice counter — atomically incremented to guarantee unique, gap-safe invoice numbers
+model InvoiceCounter {
+  userId String @id @map("user_id") @db.Uuid
+  year   Int
+  seq    Int    @default(0)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_counters")
+}
 
 // Refresh token storage for secure JWT implementation
 model RefreshToken {

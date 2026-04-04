@@ -1,47 +1,53 @@
-# FreelanceFlow API Dockerfile
-FROM node:18-alpine AS builder
+# ─── Stage 1: Build ───────────────────────────────────────────────────────────
+# Uses the full devDependencies so nest build and prisma generate can run.
+FROM node:22-alpine AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Install dependencies first (layer-cached until package*.json changes)
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Copy Prisma schema and generate the Linux-compatible client
+COPY prisma ./prisma
+RUN npx prisma generate --schema=./prisma/schema.prisma
 
-# Copy source code
+# Copy source and compile
 COPY . .
-
-# Build the application
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine AS production
 
-# Set environment
+# ─── Stage 2: Production image ────────────────────────────────────────────────
+# Only ships the compiled output + production deps; no compiler, no source.
+FROM node:22-alpine AS production
+
 ENV NODE_ENV=production
 
-# Create app user
+# Unprivileged user — never run as root in a container
 RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 
-# Set working directory
 WORKDIR /app
 
-# Copy built application from builder stage
-COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
+# Production deps only — much smaller than the full install
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Switch to non-root user
+# Prisma: schema (for migrate deploy) + the generated Linux client
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+
+# Compiled NestJS application
+COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
+
 USER nestjs
 
-# Expose port
 EXPOSE 3001
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node --version || exit 1
+# Liveness probe — hits the actual HTTP server, not just "is Node installed"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:3001/api/v1/health 2>/dev/null || exit 1
 
-# Start the application
-CMD ["npm", "run", "start:prod"]
+# Run pending DB migrations then start the server.
+# Using shell form so the && chain works; prisma migrate deploy is idempotent.
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/main"]
