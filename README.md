@@ -15,6 +15,7 @@ NestJS backend for the FreelanceFlow invoicing platform, targeting the French fr
 - [Architecture](#architecture)
 - [Database Schema](#database-schema)
 - [Git Workflow](#git-workflow)
+- [Contributing](#contributing)
 - [License](#license)
 
 ---
@@ -294,6 +295,12 @@ Reinstall hooks after a fresh clone:
 ```bash
 npm run prepare
 ```
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for branch naming, commit conventions, testing requirements, and the pull request process.
 
 ---
 
