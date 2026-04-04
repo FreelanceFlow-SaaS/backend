@@ -11,7 +11,7 @@ NestJS backend for the FreelanceFlow invoicing platform, targeting the French fr
 - [Local Development](#local-development)
 - [Scripts](#scripts)
 - [Docker](#docker)
-- [API Endpoints](#api-endpoints)
+- [API Reference](#api-reference)
 - [Architecture](#architecture)
 - [Database Schema](#database-schema)
 - [Git Workflow](#git-workflow)
@@ -59,8 +59,6 @@ npm run prisma:generate   # generate Prisma client
 npm run prisma:push       # push schema to DB (first time or after schema changes)
 npm run start:dev         # hot-reload server on port 3001
 ```
-
-Swagger UI: `http://localhost:3001/api/docs`
 
 Health check: `GET http://localhost:3001/api/v1/health`
 
@@ -131,69 +129,15 @@ The container starts by running `prisma migrate deploy` (idempotent) before laun
 
 ---
 
-## API Endpoints
+## API Reference
 
-All routes are prefixed with `/api/v1`. Protected routes require a valid JWT access token in the `Authorization: Bearer <token>` header (also accepted via HttpOnly cookie after login).
-
-**Auth** — no authentication required
+Full interactive documentation is available via Swagger UI once the server is running:
 
 ```
-POST   /auth/register
-POST   /auth/login
-POST   /auth/refresh
-POST   /auth/logout
+http://localhost:3001/api/docs
 ```
 
-**Freelancer Profile**
-
-```
-GET    /users/profile
-PATCH  /users/profile
-```
-
-**Clients**
-
-```
-POST   /clients
-GET    /clients
-GET    /clients/:id
-PATCH  /clients/:id
-DELETE /clients/:id
-```
-
-**Services**
-
-```
-POST   /services
-GET    /services
-GET    /services/:id
-PATCH  /services/:id
-DELETE /services/:id
-```
-
-**Invoices**
-
-```
-POST   /invoices
-GET    /invoices
-GET    /invoices/:id
-PATCH  /invoices/:id
-PUT    /invoices/:id/lines
-PATCH  /invoices/:id/status
-DELETE /invoices/:id
-```
-
-**PDF**
-
-```
-GET    /pdf/invoices/:id
-```
-
-**Health**
-
-```
-GET    /health
-```
+All routes are prefixed with `/api/v1`. Protected routes require a JWT access token in the `Authorization: Bearer <token>` header or via the HttpOnly cookie set at login.
 
 ---
 
