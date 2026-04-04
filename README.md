@@ -31,7 +31,7 @@ FRONTEND_URL="http://localhost:3000"
 LOG_LEVEL=debug
 ```
 
-`DATABASE_URL` must point to the **direct** connection endpoint, not a pooler. See [Known Issues](#known-issues).
+If using Neon, set `DATABASE_URL` to the **direct** connection endpoint (no `-pooler` in the hostname). The pooler runs PgBouncer in transaction mode, which does not preserve `search_path` between sessions and will cause Prisma queries to fail at runtime.
 
 ---
 
@@ -278,21 +278,4 @@ Reinstall hooks after a fresh clone:
 
 ```bash
 npm run prepare
-```
-
----
-
-## Known Issues
-
-**Neon database — use the direct connection, not the pooler**
-
-Neon provides two endpoints. The pooler (`ep-...-pooler.region.neon.tech`) runs PgBouncer in transaction mode, which does not preserve `search_path` between sessions. Prisma queries fail at runtime with "table does not exist" even though the table is present. Use the direct endpoint (no `-pooler` in the hostname) for `DATABASE_URL`.
-
-**Prisma CLI broken symlink**
-
-`npm run prisma:*` scripts may fail with a missing `.wasm` file due to a broken symlink in `node_modules/.bin/`. Use the build entrypoint directly if needed:
-
-```bash
-node node_modules/prisma/build/index.js generate --schema=./prisma/schema.prisma
-node node_modules/prisma/build/index.js db push --schema=./prisma/schema.prisma
 ```
