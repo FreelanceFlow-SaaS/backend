@@ -104,6 +104,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Wait for service to be ready
+        run: |
+          echo "Waiting for staging to be healthy..."
+          for i in $(seq 1 36); do
+            if curl -fsS "${{ secrets.STAGING_URL }}/api/v1/health" > /dev/null 2>&1; then
+              echo "Service is up after $((i * 5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Timeout: service did not respond after 3 minutes"
+          exit 1
+
       - name: Run load test
         uses: grafana/k6-action@v0.2.0
         env:
