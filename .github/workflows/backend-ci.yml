@@ -86,25 +86,18 @@ jobs:
       github.event.repository.fork == false &&
       github.ref == 'refs/heads/staging'
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Render CLI
+        run: |
+          curl -L https://github.com/render-oss/cli/releases/download/v1.1.0/cli_1.1.0_linux_amd64.zip -o render.zip
+          unzip render.zip
+          sudo mv cli_v1.1.0 /usr/local/bin/render
 
       - name: Deploy to Render
         env:
-          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
-          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          CI: true
         run: |
-          set -euo pipefail
-          npx render@latest deploy --yes --token "${RENDER_TOKEN}" --projectId "${RENDER_PROJECT_ID}" --serviceId "${RENDER_SERVICE_ID}"
+          render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --confirm --wait
 
   load-test:
     name: Load test
@@ -140,22 +133,15 @@ jobs:
       github.event.repository.fork == false &&
       github.ref == 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Render CLI
+        run: |
+          curl -L https://github.com/render-oss/cli/releases/download/v1.1.0/cli_1.1.0_linux_amd64.zip -o render.zip
+          unzip render.zip
+          sudo mv cli_v1.1.0 /usr/local/bin/render
 
       - name: Deploy to Render
         env:
-          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
-          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID_PROD }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          CI: true
         run: |
-          set -euo pipefail
-          npx render@latest deploy --yes --token "${RENDER_TOKEN}" --projectId "${RENDER_PROJECT_ID}" --serviceId "${RENDER_SERVICE_ID_PROD}"
+          render deploys create ${{ secrets.RENDER_SERVICE_ID_PROD }} --output json --confirm --wait
