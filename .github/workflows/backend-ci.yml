@@ -9,6 +9,8 @@ on:
     branches: [develop, staging, main]
   push:
     branches: [develop, staging, main]
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
 
 permissions:
@@ -57,7 +59,7 @@ jobs:
     if: >
       github.event_name == 'push' &&
       github.event.repository.fork == false &&
-      (github.ref == 'refs/heads/staging')
+      (github.ref == 'refs/heads/staging' || startsWith(github.ref, 'refs/tags/v'))
     steps:
       - uses: actions/checkout@v4
 
@@ -68,14 +70,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Resolve image tags
+        id: meta
         env:
           IMAGE_BASE: ghcr.io/${{ github.repository }}
         run: |
           IMAGE_LOWER=$(echo "$IMAGE_BASE" | tr '[:upper:]' '[:lower:]')
-          docker build -t "${IMAGE_LOWER}:${GITHUB_SHA}" -t "${IMAGE_LOWER}:latest" -f Dockerfile .
-          docker push "${IMAGE_LOWER}:${GITHUB_SHA}"
-          docker push "${IMAGE_LOWER}:latest"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "tags=${IMAGE_LOWER}:${VERSION},${IMAGE_LOWER}:latest" >> $GITHUB_OUTPUT
+          else
+            echo "tags=${IMAGE_LOWER}:${GITHUB_SHA},${IMAGE_LOWER}:latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push
+        run: |
+          IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
+          BUILD_ARGS=""
+          for TAG in "${TAGS[@]}"; do BUILD_ARGS="$BUILD_ARGS -t $TAG"; done
+          docker build $BUILD_ARGS -f Dockerfile .
+          for TAG in "${TAGS[@]}"; do docker push "$TAG"; done
 
   deploy-staging:
     name: Deploy to Render (staging)
@@ -134,12 +148,12 @@ jobs:
   deploy-production:
     name: Deploy to Render (production)
     runs-on: ubuntu-latest
-    needs: quality-and-build
+    needs: publish-image
     environment: production
     if: >
       github.event_name == 'push' &&
       github.event.repository.fork == false &&
-      github.ref == 'refs/heads/main'
+      startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v4
 
