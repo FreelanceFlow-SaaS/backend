@@ -1,0 +1,27 @@
+#!/bin/sh
+# FreelanceFlow Pre-push Hook - Final Quality Gate
+
+echo "🚀 FreelanceFlow Pre-push Hook Running..."
+
+# Run full test suite before pushing
+echo "🧪 Running full test suite..."
+npm run test
+
+# Check if tests passed
+if [ $? -ne 0 ]; then
+  echo "❌ Tests failed! Push aborted."
+  exit 1
+fi
+
+# Build the application to ensure it compiles
+echo "🏗️ Building application..."
+npm run build
+
+# Check if build succeeded
+if [ $? -ne 0 ]; then
+  echo "❌ Build failed! Push aborted."
+  exit 1
+fi
+
+echo "✅ All checks passed! Pushing to remote..."
+exit 0
