@@ -1,0 +1,10 @@
+#!/bin/sh
+# FreelanceFlow Pre-commit Hook - Ensuring Code Quality
+
+echo "🔍 FreelanceFlow Pre-commit Hook Running..."
+
+# Run lint-staged to check only staged files
+npx lint-staged
+
+# Exit with the same code as lint-staged
+exit $?
