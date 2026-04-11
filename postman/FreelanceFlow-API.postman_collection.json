@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "FreelanceFlow API",
-    "description": "FreelanceFlow — NestJS backend for French-market freelance invoicing.\n\n**Base URL:** `{{baseUrl}}`  (default: http://localhost:3001/api/v1)\n\n**Auth flow:**\n1. Run **Auth / Register** or **Auth / Login** — the `accessToken` collection variable is set automatically.\n2. All protected requests use that token via the collection-level Bearer auth.\n\n**Chained IDs:** Creating a Client, Service, or Invoice automatically stores its `id` in `clientId`, `serviceId`, or `invoiceId` collection variables for use in subsequent requests.",
+    "description": "FreelanceFlow — NestJS backend for French-market freelance invoicing.\n\n**Base URL:** `{{baseUrl}}`  (default: http://localhost:3001/api/v1)\n\n**Full run order:**\n1. Auth Setup (Register → Login)\n2. Users\n3. Clients (create only — delete is in Cleanup)\n4. Services (create only — delete is in Cleanup)\n5. Invoices (draft → sent)\n6. PDF (download while invoice is 'sent')\n7. Invoices — Teardown (cancel → delete)\n8. Cleanup (delete service → delete client)\n9. Auth Teardown (refresh → logout)\n\n**Why this order?** Deleting a client or service requires no linked invoice to exist (FK constraint). The invoice must be deleted first, which requires it to be in draft or cancelled state.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -17,7 +17,7 @@
   },
   "item": [
     {
-      "name": "Health",
+      "name": "1 — Health",
       "item": [
         {
           "name": "Liveness check",
@@ -31,7 +31,8 @@
       ]
     },
     {
-      "name": "Auth",
+      "name": "2 — Auth Setup",
+      "description": "Register (409 on re-run is expected) then Login. Login always sets the token.",
       "item": [
         {
           "name": "Register",
@@ -64,7 +65,8 @@
               "raw": "{{baseUrl}}/auth/register",
               "host": ["{{baseUrl}}"],
               "path": ["auth", "register"]
-            }
+            },
+            "description": "201 on first run, 409 Conflict on re-runs (user already exists — Login below still sets the token)."
           }
         },
         {
@@ -100,51 +102,11 @@
               "path": ["auth", "login"]
             }
           }
-        },
-        {
-          "name": "Refresh token",
-          "request": {
-            "auth": { "type": "noauth" },
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "refresh"]
-            },
-            "description": "Uses the HttpOnly `refreshToken` cookie set by Login. Postman sends cookies automatically when the setting is enabled."
-          }
-        },
-        {
-          "name": "Logout",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "if (pm.response.code === 200) {",
-                  "  pm.collectionVariables.set('accessToken', '');",
-                  "  console.log('accessToken cleared');",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["auth", "logout"]
-            }
-          }
         }
       ]
     },
     {
-      "name": "Users",
+      "name": "3 — Users",
       "item": [
         {
           "name": "Get profile",
@@ -177,7 +139,8 @@
       ]
     },
     {
-      "name": "Clients",
+      "name": "4 — Clients",
+      "description": "Delete is in section 8 — Cleanup (must happen after invoice is deleted).",
       "item": [
         {
           "name": "Create client",
@@ -241,23 +204,12 @@
               "path": ["clients", "{{clientId}}"]
             }
           }
-        },
-        {
-          "name": "Delete client",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/clients/{{clientId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["clients", "{{clientId}}"]
-            }
-          }
         }
       ]
     },
     {
-      "name": "Services (Prestations)",
+      "name": "5 — Services (Prestations)",
+      "description": "Delete is in section 8 — Cleanup (must happen after invoice is deleted).",
       "item": [
         {
           "name": "Create service",
@@ -321,23 +273,12 @@
               "path": ["services", "{{serviceId}}"]
             }
           }
-        },
-        {
-          "name": "Delete service",
-          "request": {
-            "method": "DELETE",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/services/{{serviceId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["services", "{{serviceId}}"]
-            }
-          }
         }
       ]
     },
     {
-      "name": "Invoices (Factures)",
+      "name": "6 — Invoices",
+      "description": "Create and manage invoice through draft → sent state. PDF download follows in section 7.",
       "item": [
         {
           "name": "Create invoice",
@@ -365,7 +306,7 @@
               "options": { "raw": { "language": "json" } }
             },
             "url": { "raw": "{{baseUrl}}/invoices", "host": ["{{baseUrl}}"], "path": ["invoices"] },
-            "description": "Line 2 uses `serviceId` — the unit price is overridden by the service snapshot rate."
+            "description": "Line 2 links `serviceId` — unit price is snapshotted from the service's current rate."
           }
         },
         {
@@ -420,7 +361,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["invoices", "{{invoiceId}}", "lines"]
             },
-            "description": "Replaces ALL existing lines atomically. Totals are recalculated."
+            "description": "Replaces ALL lines atomically. Totals are recalculated."
           }
         },
         {
@@ -437,29 +378,36 @@
               "raw": "{{baseUrl}}/invoices/{{invoiceId}}/status",
               "host": ["{{baseUrl}}"],
               "path": ["invoices", "{{invoiceId}}", "status"]
-            },
-            "description": "State machine: draft → sent | cancelled   /   sent → paid | cancelled"
-          }
-        },
-        {
-          "name": "Mark invoice paid (sent → paid)",
-          "request": {
-            "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"paid\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "url": {
-              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["invoices", "{{invoiceId}}", "status"]
             }
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "7 — PDF",
+      "description": "Invoice is in 'sent' state at this point — PDF generation works on any status.",
+      "item": [
         {
-          "name": "Cancel invoice",
+          "name": "Download invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/pdf/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["pdf", "invoices", "{{invoiceId}}"]
+            },
+            "description": "Returns `application/pdf`. In Postman click **Send and Download** to save the file."
+          }
+        }
+      ]
+    },
+    {
+      "name": "8 — Invoices Teardown",
+      "description": "Cancel then delete the invoice so client and service can be cleaned up.",
+      "item": [
+        {
+          "name": "Cancel invoice (sent → cancelled)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -476,7 +424,7 @@
           }
         },
         {
-          "name": "Delete invoice (draft or cancelled only)",
+          "name": "Delete invoice (cancelled → 204)",
           "request": {
             "method": "DELETE",
             "header": [],
@@ -484,25 +432,101 @@
               "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
               "host": ["{{baseUrl}}"],
               "path": ["invoices", "{{invoiceId}}"]
+            },
+            "description": "Only draft or cancelled invoices can be deleted."
+          }
+        }
+      ]
+    },
+    {
+      "name": "9 — Cleanup",
+      "description": "Safe to delete now that no invoice references these resources.",
+      "item": [
+        {
+          "name": "Delete service",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/services/{{serviceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["services", "{{serviceId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete client",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/{{clientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "{{clientId}}"]
             }
           }
         }
       ]
     },
     {
-      "name": "PDF",
+      "name": "10 — Auth Teardown",
+      "description": "Refresh and Logout run last so the token stays valid throughout the run.",
       "item": [
         {
-          "name": "Download invoice PDF",
+          "name": "Refresh token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  if (json.access_token) {",
+                  "    pm.collectionVariables.set('accessToken', json.access_token);",
+                  "    console.log('accessToken rotated from refresh');",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "auth": { "type": "noauth" },
+            "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/pdf/invoices/{{invoiceId}}",
+              "raw": "{{baseUrl}}/auth/refresh",
               "host": ["{{baseUrl}}"],
-              "path": ["pdf", "invoices", "{{invoiceId}}"]
+              "path": ["auth", "refresh"]
             },
-            "description": "Returns `application/pdf`. In Postman, click **Send and Download** to save the file."
+            "description": "Uses the HttpOnly `refreshToken` cookie set by Login. Postman sends cookies automatically."
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('accessToken', '');",
+                  "  console.log('accessToken cleared — session ended');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "logout"]
+            }
           }
         }
       ]
