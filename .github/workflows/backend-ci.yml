@@ -86,18 +86,11 @@ jobs:
       github.event.repository.fork == false &&
       github.ref == 'refs/heads/staging'
     steps:
-      - name: Install Render CLI
-        run: |
-          curl -L https://github.com/render-oss/cli/releases/download/v1.1.0/cli_1.1.0_linux_amd64.zip -o render.zip
-          unzip render.zip
-          sudo mv cli_v1.1.0 /usr/local/bin/render
+      - uses: actions/checkout@v4
 
-      - name: Deploy to Render
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          CI: true
+      - name: Trigger Render deploy webhook
         run: |
-          render deploys create ${{ secrets.RENDER_SERVICE_ID }} --output json --confirm --wait
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
 
   load-test:
     name: Load test
@@ -133,15 +126,8 @@ jobs:
       github.event.repository.fork == false &&
       github.ref == 'refs/heads/main'
     steps:
-      - name: Install Render CLI
-        run: |
-          curl -L https://github.com/render-oss/cli/releases/download/v1.1.0/cli_1.1.0_linux_amd64.zip -o render.zip
-          unzip render.zip
-          sudo mv cli_v1.1.0 /usr/local/bin/render
+      - uses: actions/checkout@v4
 
-      - name: Deploy to Render
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          CI: true
+      - name: Trigger Render deploy webhook
         run: |
-          render deploys create ${{ secrets.RENDER_SERVICE_ID_PROD }} --output json --confirm --wait
+          curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
