@@ -2,7 +2,7 @@
 # FreelanceFlow Commit Message Hook - Enforce Conventional Commits
 
 commit_msg_file=$1
-commit_msg=$(cat $commit_msg_file)
+commit_msg=$(cat "$commit_msg_file")
 
 # Conventional Commit pattern
 conventional_pattern="^(feat|fix|docs|style|refactor|test|chore|perf|ci|build)(\(.+\))?: .{1,50}"
