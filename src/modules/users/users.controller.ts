@@ -23,10 +23,7 @@ export class UsersController {
   @ApiOperation({ summary: 'Update freelancer profile' })
   @ApiResponse({ status: 200, description: 'Profile updated successfully.' })
   @ApiResponse({ status: 400, description: 'Validation error.' })
-  async updateProfile(
-    @Request() req: any,
-    @Body() updateProfileDto: UpdateFreelancerProfileDto,
-  ) {
+  async updateProfile(@Request() req: any, @Body() updateProfileDto: UpdateFreelancerProfileDto) {
     return this.usersService.updateProfile(req.user.id, updateProfileDto);
   }
 }

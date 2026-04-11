@@ -40,7 +40,7 @@ export class AuthController {
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const userId = req.user?.['id'];
     const refreshToken = req.cookies?.refreshToken;
-    
+
     return this.authService.logout(userId, refreshToken, res);
   }
 
@@ -51,7 +51,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token.' })
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.refreshToken;
-    
+
     if (!refreshToken) {
       throw new Error('Refresh token not found');
     }
