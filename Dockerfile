@@ -30,7 +30,7 @@ WORKDIR /app
 
 # Production deps only — much smaller than the full install
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm pkg delete scripts.prepare && npm ci --omit=dev && npm cache clean --force
 
 # Prisma: schema (for migrate deploy) + the generated Linux client
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma

@@ -1,13 +1,12 @@
-# Backend CI/CD — Next.js app at repo root.
+# Backend CI/CD — NestJS app at repo root.
 # Branch flow: feature/* → develop → staging → main (see README.md).
 #
-
 
 name: Backend CI
 
 on:
   pull_request:
-    branches: [develop, main, staging]
+    branches: [develop, staging, main]
   push:
     branches: [develop, staging, main]
   workflow_dispatch:
@@ -17,8 +16,8 @@ permissions:
   packages: write
 
 env:
-  HUSKY: "0"
-  NODE_VERSION: "22"
+  HUSKY: '0'
+  NODE_VERSION: '22'
 
 jobs:
   quality-and-build:
@@ -43,49 +42,102 @@ jobs:
         run: npm run format:check
 
       - name: Tests
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_TEST }}
         run: npm test
 
       - name: Next.js build
         run: npm run build
 
-  # docker:
-  #   name: Docker image (Story 6.1 Dockerfile)
-  #   runs-on: ubuntu-latest
-  #   needs: quality-and-build
-  #   if: >
-  #     github.event_name == 'push' &&
-  #     github.event.repository.fork == false &&
-  #     (github.ref == 'refs/heads/staging')
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Build image
-  #       run: docker build -t frontend:ci-${{ github.sha }} -f Dockerfile .
+  publish-image:
+    name: Publish image to GHCR
+    runs-on: ubuntu-latest
+    needs: quality-and-build
+    if: >
+      github.event_name == 'push' &&
+      github.event.repository.fork == false &&
+      (github.ref == 'refs/heads/staging')
+    steps:
+      - uses: actions/checkout@v4
 
-  # publish-image:
-  #   name: Publish image to GHCR
-  #   runs-on: ubuntu-latest
-  #   needs: docker
-  #   if: >
-  #     github.event_name == 'push' &&
-  #     github.event.repository.fork == false &&
-  #     (github.ref == 'refs/heads/staging')
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Log in to GitHub Container Registry
-  #       uses: docker/login-action@v3
-  #       with:
-  #         registry: ghcr.io
-  #         username: ${{ github.actor }}
-  #         password: ${{ secrets.GITHUB_TOKEN }}
-  #
-  #     - name: Build and push
-  #       env:
-  #         IMAGE_BASE: ghcr.io/${{ github.repository }}
-  #       run: |
-  #         IMAGE_LOWER=$(echo "$IMAGE_BASE" | tr '[:upper:]' '[:lower:]')
-  #         docker build -t "${IMAGE_LOWER}:${GITHUB_SHA}" -t "${IMAGE_LOWER}:latest" -f Dockerfile .
-  #         docker push "${IMAGE_LOWER}:${GITHUB_SHA}"
-  #         docker push "${IMAGE_LOWER}:latest"
-     
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        env:
+          IMAGE_BASE: ghcr.io/${{ github.repository }}
+        run: |
+          IMAGE_LOWER=$(echo "$IMAGE_BASE" | tr '[:upper:]' '[:lower:]')
+          docker build -t "${IMAGE_LOWER}:${GITHUB_SHA}" -t "${IMAGE_LOWER}:latest" -f Dockerfile .
+          docker push "${IMAGE_LOWER}:${GITHUB_SHA}"
+          docker push "${IMAGE_LOWER}:latest"
+
+  deploy-staging:
+    name: Deploy to Render (staging)
+    runs-on: ubuntu-latest
+    needs: publish-image
+    if: >
+      github.event_name == 'push' &&
+      github.event.repository.fork == false &&
+      github.ref == 'refs/heads/staging'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Render
+        env:
+          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          npx render@latest deploy --yes --token "${RENDER_TOKEN}" --projectId "${RENDER_PROJECT_ID}" --serviceId "${RENDER_SERVICE_ID}"
+
+  load-test:
+    name: Load test
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    if: >
+      github.event_name == 'push' &&
+      github.event.repository.fork == false &&
+      github.ref == 'refs/heads/staging'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run load test
+        uses: grafana/k6-action@v0.2.0
+        env:
+          BASE_URL: ${{ secrets.STAGING_URL }}
+        with:
+          filename: load-test.js
+          flags: --out json=results.json
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: results.json
+
+  deploy-production:
+    name: Deploy to Render (production)
+    runs-on: ubuntu-latest
+    needs: quality-and-build
+    if: >
+      github.event_name == 'push' &&
+      github.event.repository.fork == false &&
+      github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Render
+        env:
+          RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+          RENDER_PROJECT_ID: ${{ secrets.RENDER_PROJECT_ID }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID_PROD }}
+        run: |
+          set -euo pipefail
+          npx render@latest deploy --yes --token "${RENDER_TOKEN}" --projectId "${RENDER_PROJECT_ID}" --serviceId "${RENDER_SERVICE_ID_PROD}"
