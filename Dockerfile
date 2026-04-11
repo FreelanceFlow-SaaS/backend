@@ -2,6 +2,8 @@
 # Uses the full devDependencies so nest build and prisma generate can run.
 FROM node:22-alpine AS builder
 
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Install dependencies first (layer-cached until package*.json changes)
@@ -22,6 +24,9 @@ RUN npm run build
 FROM node:22-alpine AS production
 
 ENV NODE_ENV=production
+
+# OpenSSL is required by Prisma's schema engine (Rust binary) at runtime
+RUN apk add --no-cache openssl
 
 # Unprivileged user — never run as root in a container
 RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
