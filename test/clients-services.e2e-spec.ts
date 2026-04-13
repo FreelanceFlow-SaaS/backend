@@ -19,8 +19,6 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
-import { GoldenRuleExceptionFilter } from '../src/common/filters/golden-rule-exception.filter';
-import { GoldenRuleInterceptor } from '../src/common/interceptors/golden-rule.interceptor';
 
 jest.setTimeout(30000);
 
@@ -64,8 +62,6 @@ describeE2E('Clients & Services — E2E', () => {
         skipMissingProperties: false,
       })
     );
-    app.useGlobalFilters(new GoldenRuleExceptionFilter());
-    app.useGlobalInterceptors(new GoldenRuleInterceptor());
     app.setGlobalPrefix('api/v1');
     await app.init();
 

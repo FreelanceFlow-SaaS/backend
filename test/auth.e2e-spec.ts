@@ -20,8 +20,6 @@ import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/common/prisma/prisma.service';
-import { GoldenRuleExceptionFilter } from '../src/common/filters/golden-rule-exception.filter';
-import { GoldenRuleInterceptor } from '../src/common/interceptors/golden-rule.interceptor';
 
 // Neon/PostgreSQL connections can be slow — give each test and hooks enough time
 jest.setTimeout(30000);
@@ -54,8 +52,6 @@ describeE2E('Auth — E2E', () => {
         skipMissingProperties: false,
       })
     );
-    app.useGlobalFilters(new GoldenRuleExceptionFilter());
-    app.useGlobalInterceptors(new GoldenRuleInterceptor());
     app.setGlobalPrefix('api/v1');
     await app.init();
 
