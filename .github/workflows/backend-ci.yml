@@ -135,7 +135,7 @@ jobs:
       - name: Run load test
         uses: grafana/k6-action@v0.2.0
         env:
-          BASE_URL: ${{ secrets.STAGING_URL }}
+          BASE_URL: ${{ secrets.STAGING_URL }}/api/v1
         with:
           filename: load-test.js
           flags: --out json=results.json
