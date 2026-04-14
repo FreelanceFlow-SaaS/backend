@@ -6,6 +6,7 @@ interface ErrorResponse {
   statusCode: number;
   message: string | string[];
   error: string;
+  code?: string;
   timestamp: string;
   path: string;
 }
@@ -71,10 +72,16 @@ export class GoldenRuleExceptionFilter implements ExceptionFilter {
       message = "Une erreur inattendue s'est produite";
     }
 
+    // Emit SESSION_EXPIRED only when the refresh endpoint itself fails with 401,
+    // so the frontend can distinguish "try refreshing" from "must re-login".
+    const code =
+      status === 401 && request.url.includes('/auth/refresh') ? 'SESSION_EXPIRED' : undefined;
+
     return {
       statusCode: status,
       message,
       error,
+      ...(code !== undefined && { code }),
       timestamp: new Date().toISOString(),
       path: request.url,
     };
