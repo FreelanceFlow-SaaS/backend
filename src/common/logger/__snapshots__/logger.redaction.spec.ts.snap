@@ -1,0 +1,11 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`createPinoLoggerParams — redaction replaces authorization, cookie, x-api-key, password, refreshToken, accessToken, token, secret, apiKey: redacted-info-log-keys 1`] = `
+[
+  "hostname",
+  "level",
+  "pid",
+  "req",
+  "time",
+]
+`;
