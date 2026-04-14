@@ -71,17 +71,18 @@ describe('HealthController', () => {
     expect(result.error?.database?.status).toBe('down');
   });
 
-  it('exposes APP_VERSION over npm_package_version when set', async () => {
-    const prevApp = process.env.APP_VERSION;
-    const prevNpm = process.env.npm_package_version;
-    process.env.APP_VERSION = '9.9.9';
-    process.env.npm_package_version = '0.0.1';
+  it('exposes gitSha and env on healthy check', async () => {
+    const prevSha = process.env.GIT_SHA;
+    const prevEnv = process.env.NODE_ENV;
+    process.env.GIT_SHA = 'deadbeef';
+    process.env.NODE_ENV = 'test';
     healthCheckService.check.mockResolvedValue(mockHealthResult);
 
     const result = await controller.check();
 
-    expect(result.version).toBe('9.9.9');
-    process.env.APP_VERSION = prevApp;
-    process.env.npm_package_version = prevNpm;
+    expect(result.gitSha).toBe('deadbeef');
+    expect(result.env).toBe('test');
+    process.env.GIT_SHA = prevSha;
+    process.env.NODE_ENV = prevEnv;
   });
 });

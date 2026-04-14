@@ -39,15 +39,15 @@ describeE2E('Health (GET /api/v1/health) — E2E', () => {
     await app?.close();
   });
 
-  it('returns 200 with version and gitSha when database is up', async () => {
+  it('returns 200 with gitSha and env when database is up', async () => {
     const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
 
     expect(res.body).toMatchObject({
       status: 'ok',
-      version: expect.any(String) as string,
       gitSha: expect.any(String) as string,
       env: expect.any(String) as string,
     });
+    expect(res.body.version).toBeUndefined();
     expect(res.body.details?.database?.status).toBe('up');
   });
 });
