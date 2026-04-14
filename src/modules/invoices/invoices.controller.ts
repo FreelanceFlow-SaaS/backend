@@ -7,11 +7,20 @@ import {
   Param,
   Body,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiProduces,
+} from '@nestjs/swagger';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -48,6 +57,24 @@ export class InvoicesController {
   @ApiResponse({ status: 401, description: 'Non autorisé.' })
   findAll(@Req() req: any) {
     return this.invoicesService.findAll(req.user.id);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Exporter toutes les factures au format CSV (UTF-8)' })
+  @ApiProduces('text/csv')
+  @ApiResponse({ status: 200, description: 'Fichier CSV des factures.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  async exportCsv(@Req() req: any, @Res() res: Response) {
+    try {
+      const csv = await this.invoicesService.exportCsv(req.user.id);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="factures.csv"');
+      res.send('\uFEFF' + csv);
+    } catch {
+      res
+        .status(500)
+        .json({ statusCode: 500, message: 'Erreur lors de la génération du fichier CSV' });
+    }
   }
 
   @Get(':id')
