@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { RevenueByClientDto } from './revenue-by-client.dto';
+import { RevenueByMonthDto } from './revenue-by-month.dto';
 
 export class DashboardSummaryDto {
   @ApiProperty({
@@ -21,4 +23,17 @@ export class DashboardSummaryDto {
 
   @ApiProperty({ description: 'Nombre de factures annulées.', example: 1 })
   cancelledCount: number;
+
+  @ApiProperty({
+    description: 'Revenu TTC par client (factures payées uniquement), trié par revenu décroissant.',
+    type: [RevenueByClientDto],
+  })
+  revenueByClient: RevenueByClientDto[];
+
+  @ApiProperty({
+    description:
+      'Revenu TTC par mois calendaire Europe/Paris (factures payées uniquement), trié chronologiquement.',
+    type: [RevenueByMonthDto],
+  })
+  revenueByMonth: RevenueByMonthDto[];
 }

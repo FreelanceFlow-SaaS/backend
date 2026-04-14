@@ -223,6 +223,8 @@ Returns aggregated totals for the authenticated user:
 
 **Revenue rule (alignement PRD)** — `totalRevenueTtc` = somme des `totalTtc` EUR pour les factures dont `status = paid` uniquement. Les factures `sent`, `draft` ou `cancelled` ne sont pas comptabilisées. La date d'attribution du paiement est `paidAt` (renseigné à la transition `→ paid`) ; `updatedAt` n'est pas utilisé pour le revenu car il change à chaque modification de la facture.
 
+**Breakdowns** — `revenueByClient[]` (trié par revenu décroissant) et `revenueByMonth[]` (trié chronologiquement, format `YYYY-MM`) sont également retournés dans la même réponse. Les mois sont calculés en **Europe/Paris** (`AT TIME ZONE 'Europe/Paris'` côté Postgres) : une facture payée le 31 décembre à 23h30 UTC apparaît en janvier dans `revenueByMonth` (CET = UTC+1). Ce choix est documenté ici — ne pas substituer UTC sans mettre à jour les tests frontière déc/jan.
+
 ### Logging
 
 Structured JSON logging via `nestjs-pino`. PII fields (`Authorization` header, cookies, passwords, API keys, tokens) are redacted before any log is written. Business events (`user_login_success`, `user_login_failure`, `token_refresh`, etc.) carry a machine-readable `event` field for log aggregation queries. `pino-pretty` is active in development; raw JSON goes to stdout in production.
