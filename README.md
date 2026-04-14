@@ -38,8 +38,8 @@ NODE_ENV=development
 DATABASE_URL="postgresql://user:password@host:5432/dbname"
 
 JWT_SECRET="change-this-to-a-long-random-string"
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
+JWT_ACCESS_EXPIRES_IN="30m"
+JWT_REFRESH_EXPIRES_IN="30d"
 
 FRONTEND_URL="http://localhost:3000"
 
@@ -149,7 +149,7 @@ Every request passes through three globally registered concerns:
 
 1. **`ValidationPipe`** — `whitelist: true` strips unknown fields; `transform: true` coerces types.
 2. **`GoldenRuleInterceptor`** — strips sensitive fields (`passwordHash`, `refreshToken`, `tokenHash`) from all outgoing responses.
-3. **`GoldenRuleExceptionFilter`** — catches all exceptions, returns a consistent `{ statusCode, message, error, timestamp, path }` shape with French error messages.
+3. **`GoldenRuleExceptionFilter`** — catches all exceptions, returns a consistent `{ statusCode, message, error, timestamp, path }` shape with French error messages. Responses from `/auth/refresh` that result in a `401` also include `"code": "SESSION_EXPIRED"` so clients can distinguish a fully expired session from a transient auth error.
 
 ### Module Structure
 
@@ -175,9 +175,12 @@ src/
 
 ### Authentication
 
-- Access token: 15 min, returned in the response body (development only) and set as an HttpOnly cookie (`path: /`).
-- Refresh token: 7 days, HttpOnly cookie (`path: /api/v1/auth`), stored hashed in `refresh_tokens`.
+- Access token: 30 min, returned in the response body (development only) and set as an HttpOnly cookie (`path: /`).
+- Refresh token: 30 days, HttpOnly cookie, stored hashed in `refresh_tokens`.
 - Token rotation: each `/auth/refresh` atomically deletes the old token and issues a new one.
+- Stale cookie cleanup: if `/auth/refresh` fails for any reason (expired, invalid, missing), the HttpOnly cookie is cleared in the same response so the browser stops replaying a dead token.
+- Session expiry signal: a failed refresh returns `401` with `"code": "SESSION_EXPIRED"` — the frontend uses this to redirect to the login page.
+- Both durations are fully driven by `JWT_ACCESS_EXPIRES_IN` and `JWT_REFRESH_EXPIRES_IN` env vars — no code change needed to adjust them.
 
 ### Multi-tenancy
 
