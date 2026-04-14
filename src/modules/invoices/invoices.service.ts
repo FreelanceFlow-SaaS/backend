@@ -191,7 +191,14 @@ export class InvoicesService {
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.invoice.update({
         where: { id },
-        data: { status: dto.status },
+        data: {
+          status: dto.status,
+          // Record the exact moment payment is confirmed — used as the
+          // authoritative revenue date in dashboard calculations.
+          // Guard: only set paidAt on the first paid transition; never overwrite.
+          ...(dto.status === InvoiceStatus.paid &&
+            invoice.status !== InvoiceStatus.paid && { paidAt: new Date() }),
+        },
         include: INVOICE_INCLUDE,
       });
       await tx.invoiceStatusEvent.create({
