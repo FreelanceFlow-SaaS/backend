@@ -34,10 +34,12 @@ model FreelancerProfile {
   postalCode   String   @map("postal_code")
   city         String
   country      String   @default("FR")
-  vatNumber    String?  @map("vat_number")
-  siret        String?
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vatNumber      String?   @map("vat_number")
+  siret          String?
+  logoStorageKey String?   @map("logo_storage_key")
+  logoUpdatedAt  DateTime? @map("logo_updated_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("freelancer_profiles")
 }
