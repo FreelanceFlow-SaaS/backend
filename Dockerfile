@@ -31,6 +31,10 @@ ENV NODE_ENV=production
 ARG GIT_SHA=local
 ENV GIT_SHA=$GIT_SHA
 
+# Semantic app version from package.json at image build (optional; falls back in health handler).
+ARG APP_VERSION=1.0.0
+ENV APP_VERSION=$APP_VERSION
+
 # OpenSSL is required by Prisma's schema engine (Rust binary) at runtime
 RUN apk add --no-cache openssl
 

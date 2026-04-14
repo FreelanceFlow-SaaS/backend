@@ -261,19 +261,26 @@ All monetary values use `Decimal(12,2)`. VAT rates use `Decimal(5,4)` (e.g., `0.
 GET /api/v1/health
 ```
 
-Returns `200 OK` when all dependencies are healthy, `503 Service Unavailable` when any probe fails. Response body includes:
+Returns `200 OK` when all dependencies are healthy, `503 Service Unavailable` when any probe fails. Response body includes Terminus `status` / `info` / `error` / `details` plus top-level **`version`**, **`gitSha`**, **`env`** (FR31).
+
+**PostgreSQL:** `SELECT 1` via Prisma — failure → `503`.
+
+**Redis:** If **`REDIS_URL` is unset**, the Redis probe is **skipped** (reported as up with a “not configured” message). If **`REDIS_URL` is set** (cache or mail worker in V2), a failed **`PING`** degrades the check to **`503`** / `status: "error"` (NFR-G2). Keep `REDIS_URL` unset in environments that do not run Redis yet.
 
 ```json
 {
   "status": "ok",
-  "info": { "database": { "status": "up" } },
+  "info": {
+    "database": { "status": "up" },
+    "redis": { "status": "up", "message": "Redis not configured (check skipped)" }
+  },
   "version": "1.0.0",
   "gitSha": "abc1234",
   "env": "production"
 }
 ```
 
-Set `GIT_SHA` as a build-time environment variable (e.g. from CI) to expose the exact deployed commit. Used as the liveness/readiness probe in Docker and Render.
+Set **`GIT_SHA`** and optionally **`APP_VERSION`** at **image build** (`Dockerfile` `ARG`s; CI passes `--build-arg GIT_SHA` and `--build-arg APP_VERSION` from `package.json`). At runtime, `version` prefers `APP_VERSION`, then `npm_package_version` when launched via `npm`, then `1.0.0`. Used as the liveness probe in Docker and Render.
 
 ### Observability
 
@@ -298,7 +305,7 @@ Once a Grafana Cloud workspace or self-hosted Loki is wired to receive the stdou
 
 > Grafana provisioning is not yet done — the above are the setup steps for when it is. Current primary observability surface is Render's native log stream and metrics tab.
 
-> Redis health probe and queue-depth metrics will be added in story 8.3 once the Redis module (story 7.4) is in place.
+> Redis **connectivity** is covered by this health endpoint when `REDIS_URL` is set. **Queue depth** and richer cache metrics remain for story 8.3 once the Redis-backed modules (e.g. 7.4) are fully wired.
 
 ---
 
