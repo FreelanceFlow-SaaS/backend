@@ -2,12 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HealthCheckService, HealthCheckResult } from '@nestjs/terminus';
 import { HealthController } from './health.controller';
 import { PrismaHealthIndicator } from './prisma.health-indicator';
+import { RedisHealthIndicator } from './redis.health-indicator';
 
 const mockHealthResult: HealthCheckResult = {
   status: 'ok',
-  info: { database: { status: 'up' } },
+  info: { database: { status: 'up' }, redis: { status: 'up' } },
   error: {},
-  details: { database: { status: 'up' } },
+  details: { database: { status: 'up' }, redis: { status: 'up' } },
 };
 
 const mockDegradedResult: HealthCheckResult = {
@@ -21,6 +22,7 @@ describe('HealthController', () => {
   let controller: HealthController;
   let healthCheckService: jest.Mocked<HealthCheckService>;
   let prismaIndicator: jest.Mocked<PrismaHealthIndicator>;
+  let redisIndicator: jest.Mocked<RedisHealthIndicator>;
 
   beforeEach(async () => {
     healthCheckService = {
@@ -31,11 +33,16 @@ describe('HealthController', () => {
       isHealthy: jest.fn(),
     } as any;
 
+    redisIndicator = {
+      isHealthy: jest.fn(),
+    } as any;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [HealthController],
       providers: [
         { provide: HealthCheckService, useValue: healthCheckService },
         { provide: PrismaHealthIndicator, useValue: prismaIndicator },
+        { provide: RedisHealthIndicator, useValue: redisIndicator },
       ],
     }).compile();
 
@@ -49,7 +56,10 @@ describe('HealthController', () => {
 
     expect(result.status).toBe('ok');
     expect(result.info?.database?.status).toBe('up');
-    expect(healthCheckService.check).toHaveBeenCalledWith([expect.any(Function)]);
+    expect(healthCheckService.check).toHaveBeenCalledWith([
+      expect.any(Function),
+      expect.any(Function),
+    ]);
   });
 
   it('should reflect degraded status when DB is down', async () => {
@@ -59,5 +69,19 @@ describe('HealthController', () => {
 
     expect(result.status).toBe('error');
     expect(result.error?.database?.status).toBe('down');
+  });
+
+  it('exposes APP_VERSION over npm_package_version when set', async () => {
+    const prevApp = process.env.APP_VERSION;
+    const prevNpm = process.env.npm_package_version;
+    process.env.APP_VERSION = '9.9.9';
+    process.env.npm_package_version = '0.0.1';
+    healthCheckService.check.mockResolvedValue(mockHealthResult);
+
+    const result = await controller.check();
+
+    expect(result.version).toBe('9.9.9');
+    process.env.APP_VERSION = prevApp;
+    process.env.npm_package_version = prevNpm;
   });
 });
