@@ -157,7 +157,14 @@ export class PdfService {
             { text: invoice.client.name, bold: true },
             { text: invoice.client.company },
             { text: invoice.client.email, color: '#555' },
-            { text: invoice.client.address, color: '#555' },
+            {
+              text: [
+                invoice.client.addressLine1,
+                `${invoice.client.zipCode} ${invoice.client.city}`,
+                invoice.client.country,
+              ].join('\n'),
+              color: '#555',
+            },
           ],
           marginBottom: 24,
         },

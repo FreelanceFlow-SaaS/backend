@@ -13,7 +13,10 @@ const mockClient = {
   name: 'Sophie Martin',
   email: 'sophie@acme.fr',
   company: 'Acme SAS',
-  address: '42 rue du Commerce, 75015 Paris',
+  addressLine1: '42 rue du Commerce',
+  zipCode: '75015',
+  city: 'Paris',
+  country: 'FR',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };
@@ -22,7 +25,10 @@ const createDto = {
   name: mockClient.name,
   email: mockClient.email,
   company: mockClient.company,
-  address: mockClient.address,
+  addressLine1: mockClient.addressLine1,
+  zipCode: mockClient.zipCode,
+  city: mockClient.city,
+  country: mockClient.country,
 };
 
 describe('ClientsService', () => {
