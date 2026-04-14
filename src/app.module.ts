@@ -9,11 +9,12 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { ServicesModule } from './modules/services/services.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PdfModule } from './modules/pdf/pdf.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { HealthModule } from './common/health/health.module';
 import { GoldenRuleExceptionFilter } from './common/filters/golden-rule-exception.filter';
 import { GoldenRuleInterceptor } from './common/interceptors/golden-rule.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
-import { pinoLoggerConfig } from './common/logger/logger.config';
+import { createPinoLoggerParams } from './common/logger/logger.config';
 
 @Module({
   imports: [
@@ -21,7 +22,9 @@ import { pinoLoggerConfig } from './common/logger/logger.config';
       isGlobal: true,
       envFilePath: ['.env.local', '.env'],
     }),
-    LoggerModule.forRoot(pinoLoggerConfig),
+    LoggerModule.forRootAsync({
+      useFactory: () => createPinoLoggerParams(),
+    }),
     PrismaModule,
     HealthModule,
     AuthModule,
@@ -30,6 +33,7 @@ import { pinoLoggerConfig } from './common/logger/logger.config';
     ServicesModule,
     InvoicesModule,
     PdfModule,
+    DashboardModule,
   ],
   providers: [
     // Registered via DI so filters/interceptors can inject PinoLogger

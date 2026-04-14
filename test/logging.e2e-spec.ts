@@ -95,7 +95,7 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
       route: '/api/v1/health',
       httpStatus: 200,
     });
-    expect(log.timestamp ?? log.time).toBeDefined();
+    expect(log).toHaveProperty('timestamp');
     expect(log.req).toEqual(
       expect.objectContaining({
         method: 'GET',
@@ -106,8 +106,7 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
     expect(log.res).toEqual(expect.objectContaining({ httpStatus: 200 }));
 
     // Stable “shape” check for Loki / PRD field list (values vary per request).
-    const keys = Object.keys(log);
-    expect(keys).toEqual(
+    expect(Object.keys(log).sort()).toEqual(
       expect.arrayContaining([
         'env',
         'httpStatus',
@@ -119,11 +118,11 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
         'route',
         'service',
         'severity',
+        'timestamp',
       ])
     );
-    expect(keys.includes('timestamp') || keys.includes('time')).toBe(true);
     expect(typeof log.responseTime).toBe('number');
-    expect(typeof (log.timestamp ?? log.time)).toBe('string');
+    expect(typeof log.timestamp).toBe('string');
     expect(typeof log.message).toBe('string');
     expect(typeof log.severity).toBe('string');
   });
