@@ -21,6 +21,35 @@ const INVOICE_INCLUDE = {
   client: true,
 };
 
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon',
+  sent: 'Envoyée',
+  paid: 'Payée',
+  cancelled: 'Annulée',
+};
+
+// Replaces decimal point with comma (French locale: 1250,00).
+function decimalFr(value: string): string {
+  return value.replace('.', ',');
+}
+
+// Returns dd/MM/yyyy without relying on Node ICU locale.
+function formatDate(date: Date): string {
+  const d = date.getDate().toString().padStart(2, '0');
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${d}/${m}/${date.getFullYear()}`;
+}
+
+// Quotes a CSV field if it contains the separator, quotes, or newlines.
+function csvField(value: string): string {
+  if (value.includes(';') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -195,6 +224,46 @@ export class InvoicesService {
       { event: 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
       'invoice deleted'
     );
+  }
+
+  async exportCsv(userId: string): Promise<string> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { userId },
+      include: { client: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const headers = [
+      'Numéro',
+      'Client',
+      'Statut',
+      "Date d'émission",
+      "Date d'échéance",
+      'Total HT',
+      'Total TVA',
+      'Total TTC',
+      'Devise',
+      'Date de création',
+    ];
+
+    const rows = invoices.map((inv) => [
+      inv.invoiceNumber,
+      inv.client?.name ?? 'Client supprimé',
+      STATUS_FR[inv.status] ?? inv.status,
+      formatDate(inv.issueDate),
+      inv.dueDate ? formatDate(inv.dueDate) : '',
+      decimalFr(inv.totalHt.toFixed(2)),
+      decimalFr(inv.totalVat.toFixed(2)),
+      decimalFr(inv.totalTtc.toFixed(2)),
+      inv.currency,
+      formatDate(inv.createdAt),
+    ]);
+
+    this.logger.info(
+      { event: 'invoices_exported', userId, count: invoices.length },
+      'invoices CSV exported'
+    );
+    return [headers, ...rows].map((row) => row.map(csvField).join(';')).join('\r\n');
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────

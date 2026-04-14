@@ -7,11 +7,13 @@ import {
   Body,
   Param,
   Request,
+  Res,
   UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiProduces } from '@nestjs/swagger';
+import { Response } from 'express';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -39,6 +41,24 @@ export class ClientsController {
   @ApiResponse({ status: 401, description: 'Non autorisé.' })
   async findAll(@Request() req: any) {
     return this.clientsService.findAll(req.user.id);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Exporter tous les clients au format CSV (UTF-8)' })
+  @ApiProduces('text/csv')
+  @ApiResponse({ status: 200, description: 'Fichier CSV des clients.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  async exportCsv(@Request() req: any, @Res() res: Response) {
+    try {
+      const csv = await this.clientsService.exportCsv(req.user.id);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="clients.csv"');
+      res.send('\uFEFF' + csv);
+    } catch {
+      res
+        .status(500)
+        .json({ statusCode: 500, message: 'Erreur lors de la génération du fichier CSV' });
+    }
   }
 
   @Get(':id')
