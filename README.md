@@ -200,6 +200,29 @@ cancelled cancelled
 
 Paid and cancelled are terminal states. Line items on non-draft invoices are immutable. Invoice numbers are generated atomically via a PostgreSQL `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` sequence to eliminate race conditions.
 
+When an invoice transitions to `paid`, the column `paid_at` is set to the current timestamp. This is the authoritative payment date used by the dashboard revenue calculation — it is never overwritten and is independent of `updated_at` (which changes on any field edit).
+
+### Dashboard
+
+```
+GET /api/v1/dashboard/summary
+```
+
+Returns aggregated totals for the authenticated user:
+
+```json
+{
+  "totalRevenueTtc": "12500.00",
+  "invoiceCount": 7,
+  "paidCount": 3,
+  "sentCount": 2,
+  "draftCount": 1,
+  "cancelledCount": 1
+}
+```
+
+**Revenue rule (alignement PRD)** — `totalRevenueTtc` = somme des `totalTtc` EUR pour les factures dont `status = paid` uniquement. Les factures `sent`, `draft` ou `cancelled` ne sont pas comptabilisées. La date d'attribution du paiement est `paidAt` (renseigné à la transition `→ paid`) ; `updatedAt` n'est pas utilisé pour le revenu car il change à chaque modification de la facture.
+
 ### Logging
 
 Structured JSON logging via `nestjs-pino`. PII fields (`Authorization` header, cookies, passwords) are redacted before any log is written. Business events (`user_login_success`, `user_login_failure`, `token_refresh`, etc.) carry a machine-readable `event` field for log aggregation queries. `pino-pretty` is active in development; raw JSON goes to stdout in production.
