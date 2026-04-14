@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -6,12 +7,18 @@ import { Client } from '../users/user.entity';
 
 @Injectable()
 export class ClientsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectPinoLogger(ClientsService.name)
+    private readonly logger: PinoLogger
+  ) {}
 
   async create(userId: string, dto: CreateClientDto): Promise<Client> {
-    return this.prisma.client.create({
+    const client = await this.prisma.client.create({
       data: { ...dto, userId },
-    }) as Promise<Client>;
+    });
+    this.logger.info({ event: 'client_created', userId, clientId: client.id }, 'client created');
+    return client as Client;
   }
 
   async findAll(userId: string): Promise<Client[]> {
@@ -39,15 +46,18 @@ export class ClientsService {
   async update(id: string, userId: string, dto: UpdateClientDto): Promise<Client> {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
-    return this.prisma.client.update({
+    const client = await this.prisma.client.update({
       where: { id },
       data: dto,
-    }) as Promise<Client>;
+    });
+    this.logger.info({ event: 'client_updated', userId, clientId: id }, 'client updated');
+    return client as Client;
   }
 
   async remove(id: string, userId: string): Promise<void> {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
     await this.prisma.client.delete({ where: { id } });
+    this.logger.info({ event: 'client_deleted', userId, clientId: id }, 'client deleted');
   }
 }

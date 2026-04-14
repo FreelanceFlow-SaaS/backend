@@ -116,6 +116,9 @@ dist
 .env
 prisma/.env
 
+# Local dev tools (personal, not shared)
+.coderabbit.yaml
+
 # IDEs
 .vscode/
 .idea/

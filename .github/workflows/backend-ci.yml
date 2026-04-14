@@ -88,7 +88,8 @@ jobs:
           IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
           BUILD_ARGS=""
           for TAG in "${TAGS[@]}"; do BUILD_ARGS="$BUILD_ARGS -t $TAG"; done
-          docker build $BUILD_ARGS -f Dockerfile .
+          # Pass the commit SHA so GET /api/v1/health can expose it (FR31)
+          docker build $BUILD_ARGS --build-arg GIT_SHA=${{ github.sha }} -f Dockerfile .
           for TAG in "${TAGS[@]}"; do docker push "$TAG"; done
 
   deploy-staging:

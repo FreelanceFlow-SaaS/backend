@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { mockLoggerValue } from '../../common/testing/mock-logger';
 
 const USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 
@@ -43,7 +44,7 @@ describe('UsersService — Unit', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new UsersService(mockPrisma as any);
+    service = new UsersService(mockPrisma as any, mockLoggerValue as any);
   });
 
   // ─── create ──────────────────────────────────────────────────────────────────
