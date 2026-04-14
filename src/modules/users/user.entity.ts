@@ -33,7 +33,10 @@ export interface Client {
   name: string;
   email: string;
   company: string;
-  address: string;
+  addressLine1: string;
+  zipCode: string;
+  city: string;
+  country: string;
   createdAt: Date;
   updatedAt: Date;
   user?: User;
