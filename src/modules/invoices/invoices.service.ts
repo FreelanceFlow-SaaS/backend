@@ -94,7 +94,6 @@ export class InvoicesService {
           userId,
           invoiceId: invoice.id,
           invoiceNumber,
-          totalTtc: totalTtc.toFixed(2),
         },
         'invoice created'
       );
