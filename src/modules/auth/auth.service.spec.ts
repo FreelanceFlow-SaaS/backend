@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
@@ -54,11 +55,22 @@ describe('AuthService', () => {
       },
     };
 
+    const mockConfigService = {
+      get: jest.fn((key: string, defaultVal?: string) => {
+        const config: Record<string, string> = {
+          JWT_ACCESS_EXPIRES_IN: '30m',
+          JWT_REFRESH_EXPIRES_IN: '30d',
+        };
+        return config[key] ?? defaultVal;
+      }),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: UsersService, useValue: usersService },
         { provide: JwtService, useValue: jwtService },
+        { provide: ConfigService, useValue: mockConfigService },
         { provide: PrismaService, useValue: prisma },
         mockLoggerProvider(AuthService.name),
       ],

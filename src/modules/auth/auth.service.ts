@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { compare, hash } from 'bcryptjs';
 import { Response } from 'express';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
@@ -14,10 +15,25 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     @InjectPinoLogger(AuthService.name)
     private readonly logger: PinoLogger
   ) {}
+
+  /** Convert a jwt-style duration string (e.g. '30m', '7d') to milliseconds. */
+  private parseDurationMs(duration: string): number {
+    const match = /^(\d+)([smhd])$/.exec(duration);
+    if (!match) throw new Error(`Invalid duration format: ${duration}`);
+    const value = parseInt(match[1], 10);
+    const multipliers: Record<string, number> = {
+      s: 1_000,
+      m: 60_000,
+      h: 3_600_000,
+      d: 86_400_000,
+    };
+    return value * multipliers[match[2]];
+  }
 
   async register(
     createUserDto: CreateUserDto
@@ -35,7 +51,8 @@ export class AuthService {
 
     // Generate JWT
     const payload = { email: user.email, sub: user.id };
-    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const accessExpiry = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '30m');
+    const access_token = this.jwtService.sign(payload, { expiresIn: accessExpiry as any });
 
     return {
       access_token,
@@ -68,12 +85,18 @@ export class AuthService {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
-    // Generate access token (15 minutes)
+    // Generate access token
+    const accessExpiry = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '30m');
     const payload = { email: user.email, sub: user.id };
-    const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const access_token = this.jwtService.sign(payload, { expiresIn: accessExpiry as any });
 
-    // Generate refresh token (7 days)
-    const refreshToken = this.jwtService.sign({ sub: user.id }, { expiresIn: '7d' });
+    // Generate refresh token
+    const refreshExpiry = this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '30d');
+    const refreshExpireMs = this.parseDurationMs(refreshExpiry);
+    const refreshToken = this.jwtService.sign(
+      { sub: user.id },
+      { expiresIn: refreshExpiry as any }
+    );
     const refreshTokenHash = await hash(refreshToken, 10);
 
     // Store refresh token in database
@@ -81,7 +104,7 @@ export class AuthService {
       data: {
         userId: user.id,
         tokenHash: refreshTokenHash,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+        expiresAt: new Date(Date.now() + refreshExpireMs),
       },
     });
 
@@ -92,7 +115,7 @@ export class AuthService {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: refreshExpireMs,
     });
 
     return {
@@ -182,20 +205,26 @@ export class AuthService {
       }
 
       // Generate new access token
+      const accessExpiry = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '30m');
       const payload = { email: user.email, sub: user.id };
-      const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+      const access_token = this.jwtService.sign(payload, { expiresIn: accessExpiry as any });
 
-      // Generate new refresh token
-      const newRefreshToken = this.jwtService.sign({ sub: user.id }, { expiresIn: '7d' });
+      // Generate new refresh token (rotation)
+      const refreshExpiry = this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '30d');
+      const refreshExpireMs = this.parseDurationMs(refreshExpiry);
+      const newRefreshToken = this.jwtService.sign(
+        { sub: user.id },
+        { expiresIn: refreshExpiry as any }
+      );
       const newRefreshTokenHash = await hash(newRefreshToken, 10);
 
-      // Replace old refresh token with new one (rotation)
+      // Replace old refresh token with new one
       await this.prisma.refreshToken.deleteMany({ where: { userId } });
       await this.prisma.refreshToken.create({
         data: {
           userId: user.id,
           tokenHash: newRefreshTokenHash,
-          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          expiresAt: new Date(Date.now() + refreshExpireMs),
         },
       });
 
@@ -206,7 +235,7 @@ export class AuthService {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: refreshExpireMs,
       });
 
       return { access_token };
