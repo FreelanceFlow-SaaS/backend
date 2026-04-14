@@ -39,7 +39,10 @@ const mockInvoice = {
     name: 'Sophie Martin',
     company: 'Acme SAS',
     email: 'sophie@acme.fr',
-    address: '42 rue du Commerce, 75015 Paris',
+    addressLine1: '42 rue du Commerce',
+    zipCode: '75015',
+    city: 'Paris',
+    country: 'FR',
   },
   user: {
     id: USER_ID,

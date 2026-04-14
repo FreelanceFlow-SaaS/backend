@@ -20,7 +20,10 @@ const mockClient = {
   name: 'Sophie Martin',
   email: 'sophie@acme.fr',
   company: 'Acme SAS',
-  address: '42 rue du Commerce, 75015 Paris',
+  addressLine1: '42 rue du Commerce',
+  zipCode: '75015',
+  city: 'Paris',
+  country: 'FR',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
 };
@@ -82,7 +85,10 @@ describe('Clients — HTTP Pipeline (Integration)', () => {
       name: 'Sophie Martin',
       email: 'sophie@acme.fr',
       company: 'Acme SAS',
-      address: '42 rue du Commerce, 75015 Paris',
+      addressLine1: '42 rue du Commerce',
+      zipCode: '75015',
+      city: 'Paris',
+      country: 'FR',
     };
 
     it('should create a client and return 201 with the created resource', async () => {
@@ -117,6 +123,32 @@ describe('Clients — HTTP Pipeline (Integration)', () => {
 
       expect(res.body.statusCode).toBe(400);
       expect(res.body.message).toBeDefined();
+    });
+
+    it('should return 400 when addressLine1 is missing', async () => {
+      const { addressLine1: _, ...bodyWithoutAddress } = validBody;
+      await request(app.getHttpServer())
+        .post('/api/v1/clients')
+        .send(bodyWithoutAddress)
+        .expect(400);
+    });
+
+    it('should return 400 when zipCode is missing', async () => {
+      const { zipCode: _, ...bodyWithoutZip } = validBody;
+      await request(app.getHttpServer()).post('/api/v1/clients').send(bodyWithoutZip).expect(400);
+    });
+
+    it('should return 400 when city is missing', async () => {
+      const { city: _, ...bodyWithoutCity } = validBody;
+      await request(app.getHttpServer()).post('/api/v1/clients').send(bodyWithoutCity).expect(400);
+    });
+
+    it('should create a client without country (defaults to FR)', async () => {
+      const { country: _, ...bodyWithoutCountry } = validBody;
+      await request(app.getHttpServer())
+        .post('/api/v1/clients')
+        .send(bodyWithoutCountry)
+        .expect(201);
     });
 
     it('should return 400 for invalid email format', async () => {
