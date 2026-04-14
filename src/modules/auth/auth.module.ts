@@ -17,7 +17,9 @@ import { JwtAuthGuard } from './jwt-auth.guard';
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET', 'freelanceflow-secret-key'),
         signOptions: {
-          expiresIn: '1d', // Fixed string literal instead of configService
+          // ConfigService returns string; cast required because signOptions.expiresIn
+          // expects the branded StringValue type from the `ms` library.
+          expiresIn: configService.get('JWT_ACCESS_EXPIRES_IN', '30m') as any,
         },
       }),
       inject: [ConfigService],

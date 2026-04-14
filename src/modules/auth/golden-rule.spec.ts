@@ -220,9 +220,9 @@ describe('Golden Rule — HTTP Pipeline', () => {
       expect(res.body.access_token).toBe('new-mock-token');
     });
 
-    it('should return 500 when no refresh token cookie is provided', async () => {
-      // Controller throws generic Error (not HttpException) when cookie is missing
-      await request(app.getHttpServer()).post('/api/v1/auth/refresh').expect(500);
+    it('should return 401 with SESSION_EXPIRED code when no refresh token cookie is provided', async () => {
+      const res = await request(app.getHttpServer()).post('/api/v1/auth/refresh').expect(401);
+      expect(res.body.code).toBe('SESSION_EXPIRED');
     });
   });
 });
