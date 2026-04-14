@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { ServicesService } from './services.service';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { mockLoggerProvider } from '../../common/testing/mock-logger';
 
 // Two distinct users to prove tenant isolation
 const USER_A = 'user-a-uuid';
@@ -39,7 +40,11 @@ describe('ServicesService', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ServicesService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ServicesService,
+        { provide: PrismaService, useValue: prisma },
+        mockLoggerProvider(ServicesService.name),
+      ],
     }).compile();
 
     service = module.get<ServicesService>(ServicesService);

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -6,12 +7,21 @@ import { Service } from '../users/user.entity';
 
 @Injectable()
 export class ServicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectPinoLogger(ServicesService.name)
+    private readonly logger: PinoLogger
+  ) {}
 
   async create(userId: string, dto: CreateServiceDto): Promise<Service> {
-    return this.prisma.service.create({
+    const service = await this.prisma.service.create({
       data: { ...dto, userId },
-    }) as unknown as Promise<Service>;
+    });
+    this.logger.info(
+      { event: 'service_created', userId, serviceId: service.id },
+      'service created'
+    );
+    return service as unknown as Service;
   }
 
   async findAll(userId: string): Promise<Service[]> {
@@ -38,15 +48,18 @@ export class ServicesService {
   async update(id: string, userId: string, dto: UpdateServiceDto): Promise<Service> {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
-    return this.prisma.service.update({
+    const service = await this.prisma.service.update({
       where: { id },
       data: dto,
-    }) as unknown as Promise<Service>;
+    });
+    this.logger.info({ event: 'service_updated', userId, serviceId: id }, 'service updated');
+    return service as unknown as Service;
   }
 
   async remove(id: string, userId: string): Promise<void> {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
     await this.prisma.service.delete({ where: { id } });
+    this.logger.info({ event: 'service_deleted', userId, serviceId: id }, 'service deleted');
   }
 }

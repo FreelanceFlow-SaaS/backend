@@ -1,6 +1,7 @@
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InvoicesService } from './invoices.service';
+import { mockLoggerValue } from '../../common/testing/mock-logger';
 
 const USER_ID = 'user-uuid-1';
 const OTHER_USER_ID = 'user-uuid-other';
@@ -90,7 +91,7 @@ describe('InvoicesService — Unit', () => {
     jest.clearAllMocks();
     // Restore default tx mock behaviour after any test that overrides it
     mockTx.$queryRaw.mockResolvedValue([{ seq: 1 }]);
-    service = new InvoicesService(mockPrisma as any);
+    service = new InvoicesService(mockPrisma as any, mockLoggerValue as any);
   });
 
   // ─── create ──────────────────────────────────────────────────────────────────

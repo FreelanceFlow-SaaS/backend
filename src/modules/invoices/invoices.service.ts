@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateInvoiceLineDto } from './dto/create-invoice-line.dto';
@@ -22,7 +23,11 @@ const INVOICE_INCLUDE = {
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectPinoLogger(InvoicesService.name)
+    private readonly logger: PinoLogger
+  ) {}
 
   async create(userId: string, dto: CreateInvoiceDto) {
     const client = await this.prisma.client.findFirst({ where: { id: dto.clientId, userId } });
@@ -36,7 +41,7 @@ export class InvoicesService {
       // Atomic counter increment — safe under concurrent requests for the same user
       const invoiceNumber = await this.generateInvoiceNumber(userId, tx);
 
-      return tx.invoice.create({
+      const invoice = await tx.invoice.create({
         data: {
           userId,
           clientId: dto.clientId,
@@ -54,6 +59,17 @@ export class InvoicesService {
         },
         include: INVOICE_INCLUDE,
       });
+      this.logger.info(
+        {
+          event: 'invoice_created',
+          userId,
+          invoiceId: invoice.id,
+          invoiceNumber,
+          totalTtc: totalTtc.toFixed(2),
+        },
+        'invoice created'
+      );
+      return invoice;
     });
   }
 
@@ -80,7 +96,7 @@ export class InvoicesService {
       throw new BadRequestException('Seules les factures en brouillon peuvent être modifiées');
     }
 
-    return this.prisma.invoice.update({
+    const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
         ...(dto.issueDate && { issueDate: new Date(dto.issueDate) }),
@@ -91,6 +107,8 @@ export class InvoicesService {
       },
       include: INVOICE_INCLUDE,
     });
+    this.logger.info({ event: 'invoice_updated', userId, invoiceId: id }, 'invoice updated');
+    return updated;
   }
 
   async updateLines(id: string, userId: string, dto: UpdateInvoiceLinesDto) {
@@ -104,7 +122,7 @@ export class InvoicesService {
 
     return this.prisma.$transaction(async (tx) => {
       await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
-      return tx.invoice.update({
+      const updated = await tx.invoice.update({
         where: { id },
         data: {
           totalHt,
@@ -114,6 +132,11 @@ export class InvoicesService {
         },
         include: INVOICE_INCLUDE,
       });
+      this.logger.info(
+        { event: 'invoice_lines_updated', userId, invoiceId: id, lineCount: linesData.length },
+        'invoice lines updated'
+      );
+      return updated;
     });
   }
 
@@ -122,6 +145,16 @@ export class InvoicesService {
     const allowed = ALLOWED_TRANSITIONS[invoice.status];
 
     if (!allowed.includes(dto.status)) {
+      this.logger.warn(
+        {
+          event: 'invoice_status_transition_rejected',
+          userId,
+          invoiceId: id,
+          fromStatus: invoice.status,
+          toStatus: dto.status,
+        },
+        'invalid invoice status transition'
+      );
       throw new BadRequestException(
         `Transition de statut invalide: ${invoice.status} → ${dto.status}`
       );
@@ -136,6 +169,16 @@ export class InvoicesService {
       await tx.invoiceStatusEvent.create({
         data: { invoiceId: id, fromStatus: invoice.status, toStatus: dto.status },
       });
+      this.logger.info(
+        {
+          event: 'invoice_status_changed',
+          userId,
+          invoiceId: id,
+          fromStatus: invoice.status,
+          toStatus: dto.status,
+        },
+        'invoice status changed'
+      );
       return updated;
     });
   }
@@ -148,6 +191,10 @@ export class InvoicesService {
       );
     }
     await this.prisma.invoice.delete({ where: { id } });
+    this.logger.info(
+      { event: 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
+      'invoice deleted'
+    );
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
