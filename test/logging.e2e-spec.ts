@@ -14,7 +14,7 @@ jest.setTimeout(30000);
 const runE2E = !!process.env.DATABASE_URL;
 const describeE2E = runE2E ? describe : describe.skip;
 
-describeE2E('Structured logging (production JSON) — E2E', () => {
+describeE2E('Structured logging (production JSON, ECS) — E2E', () => {
   let app: INestApplication;
   let prevNodeEnv: string | undefined;
   let stdoutSpy: jest.SpyInstance;
@@ -67,7 +67,7 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
     await app?.close();
   });
 
-  it('emits parseable JSON with schema fields and exposes X-Request-Id', async () => {
+  it('emits ECS-shaped JSON with correlation and exposes X-Request-Id', async () => {
     const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
 
     const requestIdHeader = res.headers['x-request-id'] as string | undefined;
@@ -78,7 +78,7 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
       .find((line) => {
         try {
           const o = JSON.parse(line) as Record<string, unknown>;
-          return o.service === 'freelanceflow-api' && typeof o.responseTime === 'number';
+          return o['service.name'] === 'freelanceflow-api' && typeof o.responseTime === 'number';
         } catch {
           return false;
         }
@@ -88,42 +88,39 @@ describeE2E('Structured logging (production JSON) — E2E', () => {
     const log = JSON.parse(jsonLine!) as Record<string, unknown>;
 
     expect(log).toMatchObject({
-      service: 'freelanceflow-api',
-      severity: expect.any(String) as string,
+      'service.name': 'freelanceflow-api',
+      'service.environment': 'production',
+      'log.level': expect.any(String) as string,
       message: expect.any(String) as string,
-      requestId: requestIdHeader,
-      route: '/api/v1/health',
-      httpStatus: 200,
+      'http.request.id': requestIdHeader,
     });
-    expect(log).toHaveProperty('timestamp');
-    expect(log.req).toEqual(
-      expect.objectContaining({
-        method: 'GET',
-        route: '/api/v1/health',
-        requestId: requestIdHeader,
-      })
+    expect(typeof log['ecs.version']).toBe('string');
+    expect(log).toHaveProperty('@timestamp');
+    expect((log.http as Record<string, unknown>)?.response).toEqual(
+      expect.objectContaining({ status_code: 200 })
     );
-    expect(log.res).toEqual(expect.objectContaining({ httpStatus: 200 }));
+    expect((log.http as Record<string, unknown>)?.request).toEqual(
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(log.url).toEqual(expect.objectContaining({ path: '/api/v1/health' }));
 
-    // Stable “shape” check for Loki / PRD field list (values vary per request).
-    expect(Object.keys(log).sort()).toEqual(
+    expect(Object.keys(log)).toEqual(
       expect.arrayContaining([
-        'env',
-        'httpStatus',
+        '@timestamp',
+        'ecs.version',
+        'event.dataset',
+        'http',
+        'log.level',
         'message',
-        'requestId',
-        'req',
-        'res',
         'responseTime',
-        'route',
-        'service',
-        'severity',
-        'timestamp',
+        'service.environment',
+        'service.name',
+        'url',
       ])
     );
     expect(typeof log.responseTime).toBe('number');
-    expect(typeof log.timestamp).toBe('string');
+    expect(typeof log['@timestamp']).toBe('string');
     expect(typeof log.message).toBe('string');
-    expect(typeof log.severity).toBe('string');
+    expect(typeof log['log.level']).toBe('string');
   });
 });

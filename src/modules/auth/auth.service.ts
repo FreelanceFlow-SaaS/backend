@@ -47,7 +47,10 @@ export class AuthService {
     // Create user (UsersService.create handles password hashing)
     const user = await this.usersService.create(createUserDto);
 
-    this.logger.info({ event: 'user_register_success', userId: user.id }, 'user registered');
+    this.logger.info(
+      { 'event.action': 'user_register_success', userId: user.id },
+      'user registered'
+    );
 
     // Generate JWT
     const payload = { email: user.email, sub: user.id };
@@ -71,7 +74,10 @@ export class AuthService {
     // Find user by email
     const user = await this.usersService.findByEmail(loginDto.email);
     if (!user) {
-      this.logger.warn({ event: 'user_login_failure', reason: 'user_not_found' }, 'login failed');
+      this.logger.warn(
+        { 'event.action': 'user_login_failure', reason: 'user_not_found' },
+        'login failed'
+      );
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
@@ -79,7 +85,7 @@ export class AuthService {
     const isPasswordValid = await compare(loginDto.password, user.passwordHash);
     if (!isPasswordValid) {
       this.logger.warn(
-        { event: 'user_login_failure', userId: user.id, reason: 'wrong_password' },
+        { 'event.action': 'user_login_failure', userId: user.id, reason: 'wrong_password' },
         'login failed'
       );
       throw new UnauthorizedException('Email ou mot de passe incorrect');
@@ -108,7 +114,7 @@ export class AuthService {
       },
     });
 
-    this.logger.info({ event: 'user_login_success', userId: user.id }, 'user logged in');
+    this.logger.info({ 'event.action': 'user_login_success', userId: user.id }, 'user logged in');
 
     // Set refresh token as HttpOnly cookie
     res.cookie('refreshToken', refreshToken, {
@@ -153,7 +159,7 @@ export class AuthService {
         sameSite: 'strict',
       });
 
-      this.logger.info({ event: 'user_logout', userId }, 'user logged out');
+      this.logger.info({ 'event.action': 'user_logout', userId }, 'user logged out');
       return { message: 'Déconnexion réussie' };
     } catch (error) {
       // Clear cookie anyway in case of invalid token
@@ -228,7 +234,7 @@ export class AuthService {
         },
       });
 
-      this.logger.info({ event: 'token_refresh', userId }, 'token refreshed');
+      this.logger.info({ 'event.action': 'token_refresh', userId }, 'token refreshed');
 
       // Set new refresh token cookie
       res.cookie('refreshToken', newRefreshToken, {

@@ -22,7 +22,7 @@ export class GoldenRuleInterceptor implements NestInterceptor {
           const keys = Object.keys(request.body);
           if (keys.length > 0) {
             this.logger.debug(
-              { event: 'client_fields', path: request.path, fields: keys },
+              { 'event.action': 'client_fields', path: request.path, fields: keys },
               'client request fields'
             );
           }

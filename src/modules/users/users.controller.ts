@@ -23,6 +23,7 @@ import { UsersService } from './users.service';
 import { UpdateFreelancerProfileDto } from './dto/update-freelancer-profile.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import {
+  DiskStoredUploadFile,
   logoMulterOptions,
   MAX_LOGO_SIZE_BYTES,
   MAX_LOGO_WIDTH,
@@ -77,7 +78,7 @@ export class UsersController {
   })
   @ApiResponse({ status: 400, description: 'Fichier invalide (format, taille ou dimensions).' })
   @ApiResponse({ status: 401, description: 'Non autorisé.' })
-  async uploadLogo(@Request() req: any, @UploadedFile() file: Express.Multer.File) {
+  async uploadLogo(@Request() req: any, @UploadedFile() file: DiskStoredUploadFile) {
     if (!file) {
       throw new BadRequestException('Aucun fichier reçu. Champ attendu : "logo".');
     }

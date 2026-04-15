@@ -9,6 +9,14 @@ export const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 export const MAX_LOGO_WIDTH = 800;
 export const MAX_LOGO_HEIGHT = 400;
 
+/** Disk-backed upload from `FileInterceptor` / multer (avoids `Express.Multer` when `tsconfig` limits `@types`). */
+export type DiskStoredUploadFile = {
+  path: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+};
+
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 const ALLOWED_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp'];
 

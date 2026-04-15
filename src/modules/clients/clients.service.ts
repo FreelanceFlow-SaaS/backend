@@ -17,7 +17,10 @@ export class ClientsService {
     const client = await this.prisma.client.create({
       data: { ...dto, userId },
     });
-    this.logger.info({ event: 'client_created', userId, clientId: client.id }, 'client created');
+    this.logger.info(
+      { 'event.action': 'client_created', userId, clientId: client.id },
+      'client created'
+    );
     return client as Client;
   }
 
@@ -50,7 +53,7 @@ export class ClientsService {
       where: { id },
       data: dto,
     });
-    this.logger.info({ event: 'client_updated', userId, clientId: id }, 'client updated');
+    this.logger.info({ 'event.action': 'client_updated', userId, clientId: id }, 'client updated');
     return client as Client;
   }
 
@@ -58,7 +61,7 @@ export class ClientsService {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
     await this.prisma.client.delete({ where: { id } });
-    this.logger.info({ event: 'client_deleted', userId, clientId: id }, 'client deleted');
+    this.logger.info({ 'event.action': 'client_deleted', userId, clientId: id }, 'client deleted');
   }
 
   async exportCsv(userId: string): Promise<string> {
@@ -89,7 +92,7 @@ export class ClientsService {
     ]);
 
     this.logger.info(
-      { event: 'clients_exported', userId, count: clients.length },
+      { 'event.action': 'clients_exported', userId, count: clients.length },
       'clients CSV exported'
     );
     return [headers, ...rows].map((row) => row.map(csvField).join(';')).join('\r\n');
