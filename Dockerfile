@@ -25,6 +25,12 @@ FROM node:22-alpine AS production
 
 ENV NODE_ENV=production
 
+# Capture the git commit SHA at build time (injected by CI via --build-arg GIT_SHA=$GITHUB_SHA).
+# Exposed on GET /api/v1/health as { gitSha } for FR31 build identity.
+# Falls back to "local" when building outside CI.
+ARG GIT_SHA=local
+ENV GIT_SHA=$GIT_SHA
+
 # OpenSSL is required by Prisma's schema engine (Rust binary) at runtime
 RUN apk add --no-cache openssl
 

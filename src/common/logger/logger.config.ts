@@ -1,64 +1,173 @@
 import { randomUUID } from 'crypto';
-import { Params } from 'nestjs-pino';
+import type { IncomingMessage, ServerResponse } from 'http';
+import pino from 'pino';
+import type { Options } from 'pino-http';
+import type { Params } from 'nestjs-pino';
+import { ecsFormat } from '@elastic/ecs-pino-format';
+import { createElasticsearchPinoStream, parseElasticsearchEnv } from './elasticsearch-pino.stream';
 
-const isDev = process.env.NODE_ENV !== 'production';
+/** Exported for unit tests — keep in sync with `createPinoLoggerParams` redact block. */
+export const pinoHttpRedact = {
+  paths: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'req.headers["x-api-key"]',
+    'http.request.headers.authorization',
+    'http.request.headers.cookie',
+    'http.request.headers["x-api-key"]',
+    'req.body.password',
+    'req.body.passwordHash',
+    'req.body.refreshToken',
+    'req.body.accessToken',
+    'req.body.token',
+    'req.body.secret',
+    'req.body.apiKey',
+  ],
+  censor: '[REDACTED]',
+};
 
-export const pinoLoggerConfig: Params = {
-  pinoHttp: {
-    // Respect LOG_LEVEL env var; default to debug in dev, info in prod
-    level: process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info'),
+function buildPinoHttpOptions(isDev: boolean, useEcs: boolean): Options {
+  const level = process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info');
 
-    // Honour an upstream X-Request-ID header (useful behind a gateway);
-    // otherwise generate a fresh UUID for every request.
-    genReqId: (req) => (req.headers['x-request-id'] as string) ?? randomUUID(),
+  const shared: Partial<Options> = {
+    level,
 
-    // Static fields present on every log line
+    genReqId: (req: IncomingMessage) =>
+      (req.headers['x-request-id'] as string | undefined) ?? randomUUID(),
+
+    redact: { ...pinoHttpRedact },
+
+    customSuccessMessage: (req, res) =>
+      `${req.method} ${(req as IncomingMessage & { originalUrl?: string }).originalUrl ?? req.url} → ${res.statusCode}`,
+    customErrorMessage: (req, res, err) =>
+      `${req.method} ${(req as IncomingMessage & { originalUrl?: string }).originalUrl ?? req.url} → ${res.statusCode} — ${err.message}`,
+
+    messageKey: 'message',
+  };
+
+  if (useEcs) {
+    const ecs = ecsFormat({
+      convertReqRes: true,
+      serviceName: 'freelanceflow-api',
+      serviceEnvironment: process.env.NODE_ENV ?? 'development',
+      apmIntegration: false,
+    });
+    return {
+      ...ecs,
+      ...shared,
+      messageKey: 'message',
+    } as Options;
+  }
+
+  return {
+    ...shared,
     base: {
       service: 'freelanceflow-api',
       env: process.env.NODE_ENV ?? 'development',
     },
 
-    // ── PII Redaction ───────────────────────────────────────────────────────
-    // These paths are REPLACED with '[REDACTED]' before the log is written.
-    // Nothing downstream (Datadog, Loki, Elastic) ever receives the raw value.
-    redact: {
-      paths: [
-        'req.headers.authorization', // Bearer token
-        'req.headers.cookie', // HttpOnly refresh token cookie
-        'req.body.password', // Login / register payloads
-        'req.body.passwordHash', // Should never appear, but guard anyway
-        'req.body.refreshToken',
-      ],
-      censor: '[REDACTED]',
+    timestamp: pino.stdTimeFunctions.isoTime,
+
+    formatters: {
+      level(label: string) {
+        return { severity: label };
+      },
+      log(object: Record<string, unknown>) {
+        const time = object.time;
+        let timestamp: string | undefined;
+        if (typeof time === 'string') {
+          timestamp = time;
+        } else if (typeof time === 'number') {
+          timestamp = new Date(time).toISOString();
+        }
+        if (timestamp === undefined) {
+          return object;
+        }
+        const next = { ...object };
+        delete next.time;
+        next.timestamp = timestamp;
+        return next;
+      },
     },
 
-    // ── Request / Response Serialisers ──────────────────────────────────────
-    // Keep request logs lean — only fields useful for tracing/debugging.
     serializers: {
-      req(req) {
+      req(req: IncomingMessage & { id?: string; originalUrl?: string }) {
         return {
           method: req.method,
-          url: req.url,
-          request_id: req.id,
-          user_agent: req.headers['user-agent'],
+          route: req.originalUrl ?? req.url,
+          requestId: req.id,
         };
       },
-      res(res) {
-        return { status_code: res.statusCode };
+      res(res: ServerResponse) {
+        return { httpStatus: res.statusCode };
       },
     },
 
-    // Static message templates for automatic request/response lines
-    customSuccessMessage: (req, res) => `${req.method} ${(req as any).url} → ${res.statusCode}`,
-    customErrorMessage: (req, res, err) =>
-      `${req.method} ${(req as any).url} → ${res.statusCode} — ${err.message}`,
+    customProps: (
+      req: IncomingMessage & { id?: string; originalUrl?: string },
+      res: ServerResponse
+    ) => ({
+      requestId: req.id,
+      route: req.originalUrl ?? req.url,
+      httpStatus: res.statusCode,
+    }),
+  } as Options;
+}
 
-    // ── Transport ────────────────────────────────────────────────────────────
-    // In development: pretty-print with colours and human timestamps.
-    // In production: raw JSON to stdout — let the infra (Fluentbit, Promtail)
-    // ship it to Loki / Elastic / Datadog.
-    transport: isDev
-      ? {
+function pinoPrettyTransport() {
+  return pino.transport({
+    target: 'pino-pretty',
+    options: {
+      colorize: true,
+      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
+      ignore: 'pid,hostname',
+      messageKey: 'message',
+    },
+  });
+}
+
+/**
+ * Factory so `NODE_ENV` / `LOG_LEVEL` are read when Nest bootstraps the module
+ * (not at import time), which lets e2e tests force production JSON formatting.
+ *
+ * Production JSON uses **ECS** (`@elastic/ecs-pino-format`) for Elasticsearch / Kibana.
+ * When `ELASTICSEARCH_URL` + auth are set (any `NODE_ENV`), logs use ECS so shipping matches stdout.
+ *
+ * Optional: `ELASTICSEARCH_*` duplicates to Elasticsearch (bulk).
+ */
+export function createPinoLoggerParams(): Params {
+  const isDev = process.env.NODE_ENV !== 'production';
+  const esConfig = parseElasticsearchEnv();
+  const useEcs = !isDev || Boolean(esConfig);
+  const base = buildPinoHttpOptions(isDev, useEcs);
+  const logLevel = (process.env.LOG_LEVEL ?? (isDev ? 'debug' : 'info')) as pino.LevelWithSilent;
+
+  const remoteStreams: pino.DestinationStream[] = [];
+  if (esConfig) {
+    remoteStreams.push(createElasticsearchPinoStream(esConfig));
+  }
+
+  if (remoteStreams.length > 0) {
+    if (isDev) {
+      const ms = pino.multistream([
+        { level: logLevel, stream: pinoPrettyTransport() },
+        ...remoteStreams.map((stream) => ({ level: logLevel, stream })),
+      ]);
+      return { pinoHttp: [base, ms] };
+    }
+
+    const ms = pino.multistream([
+      { level: logLevel, stream: process.stdout },
+      ...remoteStreams.map((stream) => ({ level: logLevel, stream })),
+    ]);
+    return { pinoHttp: [base, ms] };
+  }
+
+  if (isDev) {
+    return {
+      pinoHttp: {
+        ...base,
+        transport: {
           target: 'pino-pretty',
           options: {
             colorize: true,
@@ -66,11 +175,10 @@ export const pinoLoggerConfig: Params = {
             ignore: 'pid,hostname',
             messageKey: 'message',
           },
-        }
-      : undefined,
+        },
+      },
+    };
+  }
 
-    // Use 'message' instead of pino's default 'msg' — aligns with the schema
-    // in the team logging spec and with most log aggregators' default field name.
-    messageKey: 'message',
-  },
-};
+  return { pinoHttp: base };
+}

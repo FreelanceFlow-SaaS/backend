@@ -78,7 +78,7 @@ async function bootstrap() {
 
   const logger = app.get(Logger);
   logger.log(
-    { event: 'server_start', port, env: process.env.NODE_ENV ?? 'development' },
+    { 'event.action': 'server_start', port, env: process.env.NODE_ENV ?? 'development' },
     'FreelanceFlow API started'
   );
 }

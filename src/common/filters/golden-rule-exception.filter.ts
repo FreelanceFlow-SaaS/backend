@@ -27,12 +27,14 @@ export class GoldenRuleExceptionFilter implements ExceptionFilter {
 
     if (errorResponse.statusCode >= 500) {
       const stack = exception instanceof Error ? exception.stack : undefined;
+      const requestId = (request as { id?: string }).id;
       this.logger.error(
         {
-          event: 'unhandled_exception',
-          status_code: errorResponse.statusCode,
+          'event.action': 'unhandled_exception',
+          httpStatus: errorResponse.statusCode,
           method: request.method,
-          path: request.url,
+          route: request.originalUrl ?? request.url,
+          requestId,
           err: stack,
         },
         errorResponse.message as string

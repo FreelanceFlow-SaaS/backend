@@ -116,6 +116,13 @@ dist
 .env
 prisma/.env
 
+# Uploaded files — tracked via .gitkeep only
+uploads/logos/*
+!uploads/logos/.gitkeep
+
+# Local dev tools (personal, not shared)
+.coderabbit.yaml
+
 # IDEs
 .vscode/
 .idea/
@@ -132,3 +139,4 @@ ehthumbs.db
 Thumbs.db
 _bmad-output/
 CLAUDE.md
+AGENTS.md

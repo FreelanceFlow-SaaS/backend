@@ -34,10 +34,12 @@ model FreelancerProfile {
   postalCode   String   @map("postal_code")
   city         String
   country      String   @default("FR")
-  vatNumber    String?  @map("vat_number")
-  siret        String?
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vatNumber      String?   @map("vat_number")
+  siret          String?
+  logoStorageKey String?   @map("logo_storage_key")
+  logoUpdatedAt  DateTime? @map("logo_updated_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("freelancer_profiles")
 }
@@ -87,6 +89,7 @@ model Invoice {
   totalHt       Decimal              @map("total_ht") @db.Decimal(12, 2)
   totalVat      Decimal              @map("total_vat") @db.Decimal(12, 2)
   totalTtc      Decimal              @map("total_ttc") @db.Decimal(12, 2)
+  paidAt        DateTime?            @map("paid_at")
   createdAt     DateTime             @default(now()) @map("created_at")
   updatedAt     DateTime             @updatedAt @map("updated_at")
   lines         InvoiceLine[]
