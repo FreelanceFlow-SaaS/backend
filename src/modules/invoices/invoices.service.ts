@@ -90,7 +90,7 @@ export class InvoicesService {
       });
       this.logger.info(
         {
-          event: 'invoice_created',
+          'event.action': 'invoice_created',
           userId,
           invoiceId: invoice.id,
           invoiceNumber,
@@ -135,7 +135,10 @@ export class InvoicesService {
       },
       include: INVOICE_INCLUDE,
     });
-    this.logger.info({ event: 'invoice_updated', userId, invoiceId: id }, 'invoice updated');
+    this.logger.info(
+      { 'event.action': 'invoice_updated', userId, invoiceId: id },
+      'invoice updated'
+    );
     return updated;
   }
 
@@ -161,7 +164,12 @@ export class InvoicesService {
         include: INVOICE_INCLUDE,
       });
       this.logger.info(
-        { event: 'invoice_lines_updated', userId, invoiceId: id, lineCount: linesData.length },
+        {
+          'event.action': 'invoice_lines_updated',
+          userId,
+          invoiceId: id,
+          lineCount: linesData.length,
+        },
         'invoice lines updated'
       );
       return updated;
@@ -175,7 +183,7 @@ export class InvoicesService {
     if (!allowed.includes(dto.status)) {
       this.logger.warn(
         {
-          event: 'invoice_status_transition_rejected',
+          'event.action': 'invoice_status_transition_rejected',
           userId,
           invoiceId: id,
           fromStatus: invoice.status,
@@ -206,7 +214,7 @@ export class InvoicesService {
       });
       this.logger.info(
         {
-          event: 'invoice_status_changed',
+          'event.action': 'invoice_status_changed',
           userId,
           invoiceId: id,
           fromStatus: invoice.status,
@@ -227,7 +235,7 @@ export class InvoicesService {
     }
     await this.prisma.invoice.delete({ where: { id } });
     this.logger.info(
-      { event: 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
+      { 'event.action': 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
       'invoice deleted'
     );
   }
@@ -266,7 +274,7 @@ export class InvoicesService {
     ]);
 
     this.logger.info(
-      { event: 'invoices_exported', userId, count: invoices.length },
+      { 'event.action': 'invoices_exported', userId, count: invoices.length },
       'invoices CSV exported'
     );
     return [headers, ...rows].map((row) => row.map(csvField).join(';')).join('\r\n');

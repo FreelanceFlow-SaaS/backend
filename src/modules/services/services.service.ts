@@ -18,7 +18,7 @@ export class ServicesService {
       data: { ...dto, userId },
     });
     this.logger.info(
-      { event: 'service_created', userId, serviceId: service.id },
+      { 'event.action': 'service_created', userId, serviceId: service.id },
       'service created'
     );
     return service as unknown as Service;
@@ -52,7 +52,10 @@ export class ServicesService {
       where: { id },
       data: dto,
     });
-    this.logger.info({ event: 'service_updated', userId, serviceId: id }, 'service updated');
+    this.logger.info(
+      { 'event.action': 'service_updated', userId, serviceId: id },
+      'service updated'
+    );
     return service as unknown as Service;
   }
 
@@ -60,6 +63,9 @@ export class ServicesService {
     await this.findOne(id, userId); // ownership check — throws 404 if not found or not owned
 
     await this.prisma.service.delete({ where: { id } });
-    this.logger.info({ event: 'service_deleted', userId, serviceId: id }, 'service deleted');
+    this.logger.info(
+      { 'event.action': 'service_deleted', userId, serviceId: id },
+      'service deleted'
+    );
   }
 }

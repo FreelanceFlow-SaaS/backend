@@ -91,7 +91,7 @@ export class DashboardService {
 
     this.logger.info(
       {
-        event: 'dashboard_summary_fetched',
+        'event.action': 'dashboard_summary_fetched',
         userId,
         clientBreakdowns: revenueByClient.length,
         monthBreakdowns: revenueByMonth.length,

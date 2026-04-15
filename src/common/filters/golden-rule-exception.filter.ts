@@ -30,7 +30,7 @@ export class GoldenRuleExceptionFilter implements ExceptionFilter {
       const requestId = (request as { id?: string }).id;
       this.logger.error(
         {
-          event: 'unhandled_exception',
+          'event.action': 'unhandled_exception',
           httpStatus: errorResponse.statusCode,
           method: request.method,
           route: request.originalUrl ?? request.url,

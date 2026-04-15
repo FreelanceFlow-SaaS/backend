@@ -9,6 +9,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateFreelancerProfileDto } from './dto/update-freelancer-profile.dto';
 import { hash } from 'bcryptjs';
 import {
+  DiskStoredUploadFile,
   LOGOS_DIR,
   MAX_LOGO_HEIGHT,
   MAX_LOGO_WIDTH,
@@ -77,11 +78,17 @@ export class UsersService {
       where: { id: userId },
       include: USER_WITH_PROFILE,
     });
-    this.logger.info({ event: 'user_profile_updated', userId }, 'freelancer profile updated');
+    this.logger.info(
+      { 'event.action': 'user_profile_updated', userId },
+      'freelancer profile updated'
+    );
     return user as User;
   }
 
-  async uploadLogo(userId: string, file: Express.Multer.File): Promise<{ logoStorageKey: string }> {
+  async uploadLogo(
+    userId: string,
+    file: DiskStoredUploadFile
+  ): Promise<{ logoStorageKey: string }> {
     // 0. Verify user exists (avoids obscure Prisma FK error on upsert connect)
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -145,7 +152,7 @@ export class UsersService {
     }
 
     this.logger.info(
-      { event: 'logo_uploaded', userId, logoStorageKey, size: file.size },
+      { 'event.action': 'logo_uploaded', userId, logoStorageKey, size: file.size },
       'logo uploaded'
     );
 

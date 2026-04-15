@@ -6,6 +6,7 @@
 import { BadRequestException } from '@nestjs/common';
 import * as fs from 'fs';
 import * as uploadConfig from '../../common/upload/logo-upload.config';
+import type { DiskStoredUploadFile } from '../../common/upload/logo-upload.config';
 import { UsersService } from './users.service';
 import { mockLoggerValue } from '../../common/testing/mock-logger';
 
@@ -48,12 +49,12 @@ const mockValidateMagicBytes = uploadConfig.validateMagicBytes as jest.Mock;
 const USER_ID = 'user-uuid-1';
 const OTHER_USER_ID = 'user-uuid-2';
 
-const mockFile = {
+const mockFile: DiskStoredUploadFile = {
   path: `/mock/uploads/logos/${USER_ID}.png`,
   filename: `${USER_ID}.png`,
   mimetype: 'image/png',
   size: 50_000,
-} as Express.Multer.File;
+};
 
 const mockPrisma = {
   freelancerProfile: {
@@ -126,11 +127,11 @@ describe('UsersService.uploadLogo()', () => {
     // Multer sets filename from req.user.id in the controller — here we verify
     // the service stores exactly the filename provided (no substitution).
     mockPrisma.user.findUnique.mockResolvedValue({ id: OTHER_USER_ID });
-    const otherFile = {
+    const otherFile: DiskStoredUploadFile = {
       ...mockFile,
       filename: `${OTHER_USER_ID}.png`,
       path: `/mock/uploads/logos/${OTHER_USER_ID}.png`,
-    } as Express.Multer.File;
+    };
 
     const result = await service.uploadLogo(OTHER_USER_ID, otherFile);
 

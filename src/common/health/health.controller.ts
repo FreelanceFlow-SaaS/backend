@@ -25,19 +25,14 @@ export class HealthController {
     description:
       'Degraded: database unreachable, or Redis unreachable while `REDIS_URL` is configured',
   })
-  async check(): Promise<HealthCheckResult & { version: string; gitSha: string; env: string }> {
+  async check(): Promise<HealthCheckResult & { gitSha: string; env: string }> {
     const result = await this.health.check([
       () => this.prismaIndicator.isHealthy('database'),
       () => this.redisIndicator.isHealthy('redis'),
     ]);
 
-    const version = process.env.APP_VERSION ?? process.env.npm_package_version ?? '1.0.0';
-
-    // FR31: expose build identity so operators and reviewers can confirm which
-    // version is running without SSH access.
     return {
       ...result,
-      version,
       gitSha: process.env.GIT_SHA ?? 'local',
       env: process.env.NODE_ENV ?? 'development',
     };

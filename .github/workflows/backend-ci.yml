@@ -88,11 +88,8 @@ jobs:
           IFS=',' read -ra TAGS <<< "${{ steps.meta.outputs.tags }}"
           BUILD_ARGS=""
           for TAG in "${TAGS[@]}"; do BUILD_ARGS="$BUILD_ARGS -t $TAG"; done
-          # Pass commit SHA and package version for GET /api/v1/health (FR31 / story 8.2)
-          APP_VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.0.0")
           docker build $BUILD_ARGS \
             --build-arg GIT_SHA=${{ github.sha }} \
-            --build-arg APP_VERSION="$APP_VERSION" \
             -f Dockerfile .
           for TAG in "${TAGS[@]}"; do docker push "$TAG"; done
 

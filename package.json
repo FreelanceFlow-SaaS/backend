@@ -59,6 +59,8 @@
   },
   "homepage": "https://github.com/FreelanceFlow-SaaS/backend#readme",
   "dependencies": {
+    "@elastic/ecs-pino-format": "^1.5.0",
+    "@elastic/elasticsearch": "^9.3.4",
     "@nestjs/common": "^11.1.17",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.1.17",
