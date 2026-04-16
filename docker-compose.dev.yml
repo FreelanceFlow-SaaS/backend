@@ -1,0 +1,13 @@
+# Local Redis for BullMQ (invoice email) and shared rate limiting.
+# Usage: docker compose -f docker-compose.dev.yml up -d
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6379:6379'
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

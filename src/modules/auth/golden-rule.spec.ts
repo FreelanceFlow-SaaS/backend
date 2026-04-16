@@ -10,6 +10,10 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { GoldenRuleExceptionFilter } from '../../common/filters/golden-rule-exception.filter';
 import { GoldenRuleInterceptor } from '../../common/interceptors/golden-rule.interceptor';
 import { mockLoggerProvider } from '../../common/testing/mock-logger';
+import {
+  testThrottlerImports,
+  testThrottlerProviders,
+} from '../../common/testing/throttler-test.module';
 
 const makeUser = (email: string) => ({
   id: 'test-uuid',
@@ -43,6 +47,7 @@ describe('Golden Rule — HTTP Pipeline', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [...testThrottlerImports],
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: mockAuthService },
@@ -50,6 +55,7 @@ describe('Golden Rule — HTTP Pipeline', () => {
         { provide: APP_INTERCEPTOR, useClass: GoldenRuleInterceptor },
         mockLoggerProvider(GoldenRuleExceptionFilter.name),
         mockLoggerProvider(GoldenRuleInterceptor.name),
+        ...testThrottlerProviders,
       ],
     })
       .overrideGuard(JwtAuthGuard)

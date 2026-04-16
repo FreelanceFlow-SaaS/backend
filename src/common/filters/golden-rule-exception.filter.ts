@@ -107,6 +107,7 @@ export class GoldenRuleExceptionFilter implements ExceptionFilter {
       'jwt expired': 'Token expiré, veuillez vous reconnecter',
       'jwt malformed': 'Token invalide',
       'invalid signature': 'Signature de token invalide',
+      'ThrottlerException: Too Many Requests': 'Trop de requêtes. Réessayez plus tard.',
     };
 
     if (translations[error]) {
