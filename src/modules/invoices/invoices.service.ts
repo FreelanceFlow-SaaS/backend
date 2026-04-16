@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { InvoiceReadCacheService } from '../../common/cache/invoice-read-cache.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateInvoiceLineDto } from './dto/create-invoice-line.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -54,6 +55,7 @@ function csvField(value: string): string {
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly invoiceReadCache: InvoiceReadCacheService,
     @InjectPinoLogger(InvoicesService.name)
     private readonly logger: PinoLogger
   ) {}
@@ -66,11 +68,11 @@ export class InvoicesService {
     const linesData = await this.buildLinesData(userId, dto.lines);
     const { totalHt, totalVat, totalTtc } = this.sumLines(linesData);
 
-    return this.prisma.$transaction(async (tx) => {
+    const invoice = await this.prisma.$transaction(async (tx) => {
       // Atomic counter increment — safe under concurrent requests for the same user
       const invoiceNumber = await this.generateInvoiceNumber(userId, tx);
 
-      const invoice = await tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           userId,
           clientId: dto.clientId,
@@ -92,24 +94,40 @@ export class InvoicesService {
         {
           'event.action': 'invoice_created',
           userId,
-          invoiceId: invoice.id,
+          invoiceId: created.id,
           invoiceNumber,
         },
         'invoice created'
       );
-      return invoice;
+      return created;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, invoice.id);
+    return invoice;
   }
 
   async findAll(userId: string) {
-    return this.prisma.invoice.findMany({
-      where: { userId },
-      include: INVOICE_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.invoiceReadCache.getInvoiceList(userId, () =>
+      this.prisma.invoice.findMany({
+        where: { userId },
+        include: INVOICE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      })
+    );
   }
 
   async findOne(id: string, userId: string) {
+    const invoice = await this.invoiceReadCache.getInvoiceDetailCacheAside(userId, id, () =>
+      this.prisma.invoice.findFirst({
+        where: { id, userId },
+        include: INVOICE_INCLUDE,
+      })
+    );
+    if (!invoice) throw new NotFoundException('Facture introuvable');
+    return invoice;
+  }
+
+  /** Authoritative read for mutations — never served from read-through cache. */
+  private async findOneFromDatabase(id: string, userId: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, userId },
       include: INVOICE_INCLUDE,
@@ -119,7 +137,7 @@ export class InvoicesService {
   }
 
   async update(id: string, userId: string, dto: UpdateInvoiceDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft) {
       throw new BadRequestException('Seules les factures en brouillon peuvent être modifiées');
     }
@@ -139,11 +157,12 @@ export class InvoicesService {
       { 'event.action': 'invoice_updated', userId, invoiceId: id },
       'invoice updated'
     );
+    await this.invoiceReadCache.invalidateForUser(userId, id);
     return updated;
   }
 
   async updateLines(id: string, userId: string, dto: UpdateInvoiceLinesDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft) {
       throw new BadRequestException('Seules les factures en brouillon peuvent être modifiées');
     }
@@ -151,9 +170,9 @@ export class InvoicesService {
     const linesData = await this.buildLinesData(userId, dto.lines);
     const { totalHt, totalVat, totalTtc } = this.sumLines(linesData);
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
-      const updated = await tx.invoice.update({
+      const inv = await tx.invoice.update({
         where: { id },
         data: {
           totalHt,
@@ -172,12 +191,14 @@ export class InvoicesService {
         },
         'invoice lines updated'
       );
-      return updated;
+      return inv;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+    return updated;
   }
 
   async updateStatus(id: string, userId: string, dto: UpdateInvoiceStatusDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     const allowed = ALLOWED_TRANSITIONS[invoice.status];
 
     if (!allowed.includes(dto.status)) {
@@ -196,8 +217,8 @@ export class InvoicesService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.invoice.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.update({
         where: { id },
         data: {
           status: dto.status,
@@ -222,12 +243,14 @@ export class InvoicesService {
         },
         'invoice status changed'
       );
-      return updated;
+      return inv;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+    return updated;
   }
 
   async remove(id: string, userId: string) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft && invoice.status !== InvoiceStatus.cancelled) {
       throw new BadRequestException(
         'Seules les factures en brouillon ou annulées peuvent être supprimées'
@@ -238,6 +261,7 @@ export class InvoicesService {
       { 'event.action': 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
       'invoice deleted'
     );
+    await this.invoiceReadCache.invalidateForUser(userId, id);
   }
 
   async exportCsv(userId: string): Promise<string> {

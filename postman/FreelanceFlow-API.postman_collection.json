@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "FreelanceFlow API",
-    "description": "FreelanceFlow — NestJS backend for French-market freelance invoicing.\n\n**Base URL:** `{{baseUrl}}`  (default: http://localhost:3001/api/v1)\n\n**Full run order:**\n1. Auth Setup (Register → Login)\n2. Users\n3. Clients (create only — delete is in Cleanup)\n4. Services (create only — delete is in Cleanup)\n5. Invoices (draft → sent)\n6. PDF (download while invoice is 'sent')\n7. Invoices — Teardown (cancel → delete)\n8. Cleanup (delete service → delete client)\n9. Auth Teardown (refresh → logout)\n\n**Why this order?** Deleting a client or service requires no linked invoice to exist (FK constraint). The invoice must be deleted first, which requires it to be in draft or cancelled state.",
+    "description": "FreelanceFlow — NestJS backend for French-market freelance invoicing.\n\n**Base URL:** `{{baseUrl}}`  (default: http://localhost:3001/api/v1)\n\n**Full run order:**\n1. Health (optional)\n2. Auth Setup (Register → Login)\n3. Users (profile + optional logo)\n3a. Dashboard summary (optional)\n4. Clients (create only — delete is in Cleanup)\n5. Services (create only — delete is in Cleanup)\n6. Invoices (draft → sent → optional CSV export / queue email)\n7. PDF (download while invoice is 'sent')\n8. Invoices — Teardown (cancel → delete)\n9. Cleanup (delete service → delete client)\n10. Auth Teardown (refresh → logout)\n\n**Notes:** `GET /health` returns Terminus JSON (`database`, optional `redis` if `REDIS_URL` is set) plus `gitSha` and `env`. **Send invoice email** returns **202** with `jobId` when SMTP + queue are configured; otherwise **503**. **Exports CSV** — use **Send and Download** in Postman.\n\n**Why this order?** Deleting a client or service requires no linked invoice to exist (FK constraint). The invoice must be deleted first, which requires it to be in draft or cancelled state.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -25,7 +25,8 @@
             "auth": { "type": "noauth" },
             "method": "GET",
             "header": [],
-            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Terminus health: `database` (PostgreSQL), `redis` (only checked when `REDIS_URL` is set). Top-level `gitSha`, `env`. **503** if DB down or Redis required but unreachable."
           }
         }
       ]
@@ -135,6 +136,62 @@
               "path": ["users", "profile"]
             }
           }
+        },
+        {
+          "name": "Upload profile logo (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "logo",
+                  "description": "PNG, JPEG ou WebP — voir contraintes taille/dimensions dans Swagger.",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/profile/logo",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile", "logo"]
+            },
+            "description": "**201** avec `logoStorageKey`. Remplace un logo existant. Champ formulaire attendu : **logo**."
+          }
+        },
+        {
+          "name": "Get profile logo (image)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/profile/logo",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "profile", "logo"]
+            },
+            "description": "Flux image (`image/png`, `jpeg`, ou `webp`). **404** si aucun logo."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3a — Dashboard",
+      "description": "Résumé CA TTC (factures payées) et comptages par statut.",
+      "item": [
+        {
+          "name": "Dashboard summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/summary",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "summary"]
+            },
+            "description": "JSON : CA TTC, volumes par statut de facture (EUR)."
+          }
         }
       ]
     },
@@ -164,9 +221,10 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Sophie Martin\",\n  \"email\": \"sophie@acme.fr\",\n  \"company\": \"Acme SAS\",\n  \"address\": \"42 rue du Commerce, 75015 Paris\"\n}"
+              "raw": "{\n  \"name\": \"Sophie Martin\",\n  \"email\": \"sophie@acme.fr\",\n  \"company\": \"Acme SAS\",\n  \"addressLine1\": \"42 rue du Commerce\",\n  \"zipCode\": \"75015\",\n  \"city\": \"Paris\",\n  \"country\": \"FR\"\n}"
             },
-            "url": { "raw": "{{baseUrl}}/clients", "host": ["{{baseUrl}}"], "path": ["clients"] }
+            "url": { "raw": "{{baseUrl}}/clients", "host": ["{{baseUrl}}"], "path": ["clients"] },
+            "description": "Champs adresse alignés sur `CreateClientDto` : `addressLine1`, `zipCode`, `city` (obligatoires) ; `country` optionnel (défaut côté persistance souvent FR)."
           }
         },
         {
@@ -196,13 +254,26 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Sophie Martin (updated)\",\n  \"email\": \"sophie.updated@acme.fr\",\n  \"company\": \"Acme SAS\",\n  \"address\": \"10 avenue Victor Hugo, 75016 Paris\"\n}"
+              "raw": "{\n  \"name\": \"Sophie Martin (updated)\",\n  \"email\": \"sophie.updated@acme.fr\",\n  \"company\": \"Acme SAS\",\n  \"addressLine1\": \"10 avenue Victor Hugo\",\n  \"zipCode\": \"75016\",\n  \"city\": \"Paris\",\n  \"country\": \"FR\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/clients/{{clientId}}",
               "host": ["{{baseUrl}}"],
               "path": ["clients", "{{clientId}}"]
             }
+          }
+        },
+        {
+          "name": "Export clients (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/clients/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["clients", "export"]
+            },
+            "description": "`text/csv; charset=utf-8` avec BOM UTF-8. **Send and Download** dans Postman."
           }
         }
       ]
@@ -380,6 +451,55 @@
               "path": ["invoices", "{{invoiceId}}", "status"]
             }
           }
+        },
+        {
+          "name": "Mark invoice as paid (sent → paid)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"paid\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "status"]
+            },
+            "description": "Transition **sent → paid** (renseigne `paidAt`). Utile pour le **Dashboard** (CA TTC des payées). **Attention :** une facture `paid` n’a **aucune** transition suivante — ne l’exécutez pas si vous comptez enchaîner avec la section **8 — Teardown** (annulation) sur la même facture."
+          }
+        },
+        {
+          "name": "Export invoices (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/export",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "export"]
+            },
+            "description": "`text/csv; charset=utf-8` avec BOM UTF-8. **Send and Download** dans Postman."
+          }
+        },
+        {
+          "name": "Queue send invoice email (202)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": [\"sophie@acme.fr\"],\n  \"subject\": \"Facture FreelanceFlow\",\n  \"body\": \"Bonjour,\\n\\nVeuillez trouver ci-joint notre facture en PDF.\\n\\nCordialement,\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/send-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "send-email"]
+            },
+            "description": "**202 Accepted** avec `jobId` si SMTP + file (Redis/Bull) sont configurés. **503** si email ou file indisponible. **400** si facture annulée. Limite **429** possible (throttle). Ne confirme pas la livraison chez le destinataire."
+          }
         }
       ]
     },
@@ -404,7 +524,7 @@
     },
     {
       "name": "8 — Invoices Teardown",
-      "description": "Cancel then delete the invoice so client and service can be cleaned up.",
+      "description": "Annuler (`sent` → `cancelled`) puis supprimer la facture. **Impossible** si la facture est passée en **`paid`** (aucune transition depuis `paid`) — dans ce cas créez une autre facture de test ou n’exécutez pas « Mark as paid » avant le teardown.",
       "item": [
         {
           "name": "Cancel invoice (sent → cancelled)",

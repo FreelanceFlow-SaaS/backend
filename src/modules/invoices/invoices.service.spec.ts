@@ -84,6 +84,14 @@ const mockPrisma = {
   $transaction: jest.fn().mockImplementation((fn: any) => fn(mockTx)),
 };
 
+const mockInvoiceReadCache = {
+  invalidateForUser: jest.fn().mockResolvedValue(undefined),
+  getInvoiceList: jest.fn((_userId: string, loader: () => Promise<unknown>) => loader()),
+  getInvoiceDetailCacheAside: jest.fn(
+    (_userId: string, _id: string, loader: () => Promise<unknown>) => loader()
+  ),
+};
+
 describe('InvoicesService — Unit', () => {
   let service: InvoicesService;
 
@@ -91,7 +99,11 @@ describe('InvoicesService — Unit', () => {
     jest.clearAllMocks();
     // Restore default tx mock behaviour after any test that overrides it
     mockTx.$queryRaw.mockResolvedValue([{ seq: 1 }]);
-    service = new InvoicesService(mockPrisma as any, mockLoggerValue as any);
+    service = new InvoicesService(
+      mockPrisma as any,
+      mockInvoiceReadCache as any,
+      mockLoggerValue as any
+    );
   });
 
   // ─── create ──────────────────────────────────────────────────────────────────
@@ -125,6 +137,7 @@ describe('InvoicesService — Unit', () => {
         where: { id: CLIENT_ID, userId: USER_ID },
       });
       expect(mockTx.invoice.create).toHaveBeenCalled();
+      expect(mockInvoiceReadCache.invalidateForUser).toHaveBeenCalledWith(USER_ID, INVOICE_ID);
     });
 
     it('SNAPSHOT: should use service.hourlyRateHt as unitPriceHt, not the value in DTO', async () => {

@@ -1,8 +1,15 @@
 import { DashboardService } from './dashboard.service';
 import { mockLoggerValue } from '../../common/testing/mock-logger';
 import { InvoiceStatus, Prisma } from '@prisma/client';
+import type { DashboardSummaryDto } from './dto/dashboard-summary.dto';
 
 const USER_ID = 'user-uuid-1';
+
+const mockInvoiceReadCache = {
+  getDashboardSummary: jest.fn(async (_uid: string, loader: () => Promise<DashboardSummaryDto>) =>
+    loader()
+  ),
+};
 
 const mockStatusCounts = [
   { status: InvoiceStatus.paid, _count: { _all: 3 } },
@@ -53,7 +60,11 @@ describe('DashboardService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPrisma = buildMockPrisma();
-    service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+    service = new DashboardService(
+      mockPrisma as any,
+      mockInvoiceReadCache as any,
+      mockLoggerValue as any
+    );
   });
 
   describe('totalRevenueTtc', () => {
@@ -67,7 +78,11 @@ describe('DashboardService', () => {
 
     it('should return "0.00" when no paid invoices exist', async () => {
       mockPrisma = buildMockPrisma({ aggregate: { _sum: { totalTtc: null } } });
-      service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+      service = new DashboardService(
+        mockPrisma as any,
+        mockInvoiceReadCache as any,
+        mockLoggerValue as any
+      );
       const result = await service.getSummary(USER_ID);
       expect(result.totalRevenueTtc).toBe('0.00');
     });
@@ -91,7 +106,11 @@ describe('DashboardService', () => {
       mockPrisma = buildMockPrisma({
         groupBy: [{ status: InvoiceStatus.draft, _count: { _all: 5 } }],
       });
-      service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+      service = new DashboardService(
+        mockPrisma as any,
+        mockInvoiceReadCache as any,
+        mockLoggerValue as any
+      );
       const result = await service.getSummary(USER_ID);
       expect(result.paidCount).toBe(0);
       expect(result.sentCount).toBe(0);
@@ -111,7 +130,11 @@ describe('DashboardService', () => {
 
     it('should return empty array when no paid invoices', async () => {
       mockPrisma = buildMockPrisma({ clientRows: [], monthRows: [] });
-      service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+      service = new DashboardService(
+        mockPrisma as any,
+        mockInvoiceReadCache as any,
+        mockLoggerValue as any
+      );
       const result = await service.getSummary(USER_ID);
       expect(result.revenueByClient).toEqual([]);
     });
@@ -135,7 +158,11 @@ describe('DashboardService', () => {
         { month: '2026-01', totalTtc: new Prisma.Decimal('800.00') },
       ];
       mockPrisma = buildMockPrisma({ monthRows: boundaryRows });
-      service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+      service = new DashboardService(
+        mockPrisma as any,
+        mockInvoiceReadCache as any,
+        mockLoggerValue as any
+      );
       const result = await service.getSummary(USER_ID);
       expect(result.revenueByMonth).toHaveLength(2);
       expect(result.revenueByMonth[0]).toEqual({ month: '2025-12', totalTtc: '500.00' });
@@ -144,7 +171,11 @@ describe('DashboardService', () => {
 
     it('should return empty array when no paid invoices', async () => {
       mockPrisma = buildMockPrisma({ clientRows: [], monthRows: [] });
-      service = new DashboardService(mockPrisma as any, mockLoggerValue as any);
+      service = new DashboardService(
+        mockPrisma as any,
+        mockInvoiceReadCache as any,
+        mockLoggerValue as any
+      );
       const result = await service.getSummary(USER_ID);
       expect(result.revenueByMonth).toEqual([]);
     });

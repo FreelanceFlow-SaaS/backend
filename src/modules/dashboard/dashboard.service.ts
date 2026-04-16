@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { InvoiceReadCacheService } from '../../common/cache/invoice-read-cache.service';
 import { DashboardSummaryDto } from './dto/dashboard-summary.dto';
 import { RevenueByClientDto } from './dto/revenue-by-client.dto';
 import { RevenueByMonthDto } from './dto/revenue-by-month.dto';
@@ -14,11 +15,17 @@ type MonthRevenueRow = { month: string; totalTtc: Prisma.Decimal };
 export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly invoiceReadCache: InvoiceReadCacheService,
     @InjectPinoLogger(DashboardService.name)
     private readonly logger: PinoLogger
   ) {}
 
   async getSummary(userId: string): Promise<DashboardSummaryDto> {
+    return this.invoiceReadCache.getDashboardSummary(userId, () => this.computeSummary(userId));
+  }
+
+  /** Uncached aggregate queries (invoked inside Redis cache-aside when enabled). */
+  private async computeSummary(userId: string): Promise<DashboardSummaryDto> {
     // All queries run in parallel — single network round-trip batch.
     const [revenueResult, statusCounts, clientRows, monthRows] = await Promise.all([
       // 1. Total revenue (paid only)
