@@ -31,6 +31,7 @@ describe('RedisHealthIndicator', () => {
     MockedRedis.mockImplementation(
       () =>
         ({
+          connect: jest.fn().mockResolvedValue(undefined),
           ping: jest.fn().mockResolvedValue('PONG'),
           quit: jest.fn().mockResolvedValue('OK'),
           disconnect: jest.fn(),
@@ -51,6 +52,7 @@ describe('RedisHealthIndicator', () => {
     MockedRedis.mockImplementation(
       () =>
         ({
+          connect: jest.fn().mockResolvedValue(undefined),
           ping: jest.fn().mockRejectedValue(new Error('ECONNREFUSED')),
           quit: jest.fn().mockResolvedValue('OK'),
           disconnect: jest.fn(),

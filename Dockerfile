@@ -51,6 +51,9 @@ COPY --from=builder --chown=nestjs:nodejs /app/node_modules/@prisma ./node_modul
 # Compiled NestJS application
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 
+# Logo uploads: WORKDIR /app stays root-owned; nestjs cannot mkdir under /app without this.
+RUN mkdir -p /app/uploads/logos && chown -R nestjs:nodejs /app/uploads
+
 USER nestjs
 
 EXPOSE 3001
