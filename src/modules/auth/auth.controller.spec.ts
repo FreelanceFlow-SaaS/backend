@@ -3,6 +3,10 @@ import { UnauthorizedException } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { Request, Response } from 'express';
+import {
+  testThrottlerImports,
+  testThrottlerProviders,
+} from '../../common/testing/throttler-test.module';
 
 const mockRes = () => {
   const res: Partial<Response> = {
@@ -28,8 +32,9 @@ describe('AuthController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [...testThrottlerImports],
       controllers: [AuthController],
-      providers: [{ provide: AuthService, useValue: authService }],
+      providers: [{ provide: AuthService, useValue: authService }, ...testThrottlerProviders],
     }).compile();
 
     controller = module.get<AuthController>(AuthController);

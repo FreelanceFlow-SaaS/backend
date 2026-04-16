@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -10,8 +11,11 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Inject,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -22,18 +26,29 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RouteUserThrottlerGuard } from '../../common/throttler/route-user-throttler.guard';
+import { MailService } from '../mail/mail.service';
+import {
+  INVOICE_EMAIL_ENQUEUE,
+  type InvoiceEmailEnqueue,
+} from '../invoice-email/invoice-email-enqueue.token';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { UpdateInvoiceLinesDto } from './dto/update-invoice-lines.dto';
 import { UpdateInvoiceStatusDto } from './dto/update-invoice-status.dto';
+import { SendInvoiceEmailDto } from './dto/send-invoice-email.dto';
 
 @ApiTags('Invoices')
 @ApiBearerAuth('jwt')
 @UseGuards(JwtAuthGuard)
 @Controller('invoices')
 export class InvoicesController {
-  constructor(private readonly invoicesService: InvoicesService) {}
+  constructor(
+    private readonly invoicesService: InvoicesService,
+    @Inject(INVOICE_EMAIL_ENQUEUE) private readonly invoiceEmailEnqueue: InvoiceEmailEnqueue,
+    private readonly mailService: MailService
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Créer une nouvelle facture' })
@@ -75,6 +90,56 @@ export class InvoicesController {
         .status(500)
         .json({ statusCode: 500, message: 'Erreur lors de la génération du fichier CSV' });
     }
+  }
+
+  @Post(':id/send-email')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @UseGuards(RouteUserThrottlerGuard)
+  @ApiOperation({
+    summary: "Mettre en file d'envoi un email de facture (PDF + message)",
+    description:
+      "Réponse **202 Accepted** avec `jobId` : la demande est acceptée pour traitement asynchrone. Cela **ne garantit pas** que l'email a été délivré au(x) destinataire(s) (voir README — sémantique NFR-I2).",
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Demande acceptée — job BullMQ créé ; livraison SMTP traitée par le worker.',
+  })
+  @ApiResponse({ status: 400, description: 'Facture annulée ou données invalides.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  @ApiResponse({ status: 404, description: 'Facture introuvable.' })
+  @ApiResponse({ status: 429, description: 'Trop de requêtes (limite par utilisateur et route).' })
+  @ApiResponse({
+    status: 503,
+    description: 'Redis (file) ou SMTP non configuré pour cet environnement.',
+  })
+  async sendInvoiceEmail(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: SendInvoiceEmailDto
+  ) {
+    const invoice = await this.invoicesService.findOne(id, req.user.id);
+    if (invoice.status === 'cancelled') {
+      throw new BadRequestException("Impossible d'envoyer par email une facture annulée.");
+    }
+    if (!this.mailService.isConfigured()) {
+      throw new ServiceUnavailableException(
+        'Configuration email incomplète. Renseignez SMTP_HOST (voir README et .env.example).'
+      );
+    }
+    const jobId = await this.invoiceEmailEnqueue.enqueueSendInvoiceEmail({
+      userId: req.user.id,
+      invoiceId: id,
+      to: dto.to,
+      subject: dto.subject,
+      body: dto.body,
+    });
+    return {
+      jobId,
+      status: 'accepted',
+      message:
+        "Demande d'envoi acceptée pour traitement asynchrone. Ce message ne confirme pas la livraison chez le destinataire.",
+    };
   }
 
   @Get(':id')

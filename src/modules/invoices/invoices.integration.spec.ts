@@ -17,6 +17,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GoldenRuleExceptionFilter } from '../../common/filters/golden-rule-exception.filter';
 import { GoldenRuleInterceptor } from '../../common/interceptors/golden-rule.interceptor';
 import { mockLoggerProvider } from '../../common/testing/mock-logger';
+import {
+  testThrottlerImports,
+  testThrottlerProviders,
+} from '../../common/testing/throttler-test.module';
+import { MailService } from '../mail/mail.service';
+import { INVOICE_EMAIL_ENQUEUE } from '../invoice-email/invoice-email-enqueue.token';
 
 const MOCK_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const INVOICE_ID = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
@@ -65,6 +71,12 @@ const validCreateBody = {
 describe('Invoices — HTTP Pipeline (Integration)', () => {
   let app: INestApplication;
   let mockInvoicesService: jest.Mocked<InvoicesService>;
+  const mockInvoiceEmailEnqueue = {
+    enqueueSendInvoiceEmail: jest.fn().mockResolvedValue('test-job-id'),
+  };
+  const mockMailService = {
+    isConfigured: jest.fn(() => true),
+  };
 
   beforeAll(async () => {
     mockInvoicesService = {
@@ -78,13 +90,17 @@ describe('Invoices — HTTP Pipeline (Integration)', () => {
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [...testThrottlerImports],
       controllers: [InvoicesController],
       providers: [
         { provide: InvoicesService, useValue: mockInvoicesService },
+        { provide: INVOICE_EMAIL_ENQUEUE, useValue: mockInvoiceEmailEnqueue },
+        { provide: MailService, useValue: mockMailService },
         { provide: APP_FILTER, useClass: GoldenRuleExceptionFilter },
         { provide: APP_INTERCEPTOR, useClass: GoldenRuleInterceptor },
         mockLoggerProvider(GoldenRuleExceptionFilter.name),
         mockLoggerProvider(GoldenRuleInterceptor.name),
+        ...testThrottlerProviders,
       ],
     })
       .overrideGuard(JwtAuthGuard)
@@ -395,6 +411,42 @@ describe('Invoices — HTTP Pipeline (Integration)', () => {
         .patch('/api/v1/invoices/non-existent-id/status')
         .send({ status: 'sent' })
         .expect(404);
+    });
+  });
+
+  // ─── POST /invoices/:id/send-email ───────────────────────────────────────────
+
+  describe('POST /api/v1/invoices/:id/send-email', () => {
+    it('should return 202 with jobId when SMTP is configured', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/invoices/${INVOICE_ID}/send-email`)
+        .send({
+          to: ['client@example.com'],
+          subject: 'Facture',
+          body: 'Bonjour, merci.',
+        })
+        .expect(202);
+
+      expect(res.body.jobId).toBe('test-job-id');
+      expect(res.body.status).toBe('accepted');
+      expect(mockInvoiceEmailEnqueue.enqueueSendInvoiceEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: MOCK_USER_ID,
+          invoiceId: INVOICE_ID,
+          to: ['client@example.com'],
+          subject: 'Facture',
+          body: 'Bonjour, merci.',
+        })
+      );
+    });
+
+    it('should return 503 when SMTP is not configured', async () => {
+      mockMailService.isConfigured.mockReturnValueOnce(false);
+      await request(app.getHttpServer())
+        .post(`/api/v1/invoices/${INVOICE_ID}/send-email`)
+        .send({ to: ['a@b.co'], subject: 'S', body: 'B' })
+        .expect(503);
+      mockMailService.isConfigured.mockReturnValue(true);
     });
   });
 
