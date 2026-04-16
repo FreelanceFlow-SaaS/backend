@@ -10,6 +10,10 @@ import { PdfService } from './pdf.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { GoldenRuleExceptionFilter } from '../../common/filters/golden-rule-exception.filter';
 import { mockLoggerProvider } from '../../common/testing/mock-logger';
+import {
+  testThrottlerImports,
+  testThrottlerProviders,
+} from '../../common/testing/throttler-test.module';
 
 const MOCK_USER_ID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
 const INVOICE_ID = 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22';
@@ -27,11 +31,13 @@ describe('PDF — HTTP Pipeline (Integration)', () => {
     } as any;
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [...testThrottlerImports],
       controllers: [PdfController],
       providers: [
         { provide: PdfService, useValue: mockPdfService },
         { provide: APP_FILTER, useClass: GoldenRuleExceptionFilter },
         mockLoggerProvider(GoldenRuleExceptionFilter.name),
+        ...testThrottlerProviders,
       ],
     })
       .overrideGuard(JwtAuthGuard)

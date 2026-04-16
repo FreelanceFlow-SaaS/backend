@@ -1,4 +1,10 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  StreamableFile,
+} from '@nestjs/common';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -35,6 +41,10 @@ export class GoldenRuleInterceptor implements NestInterceptor {
 
   private sanitizeResponse(data: any): any {
     // ✅ "Conservative in what you send" - Never leak sensitive data
+    if (data instanceof StreamableFile) {
+      // Spreading a StreamableFile strips its prototype and turns the Readable into JSON garbage.
+      return data;
+    }
     if (Array.isArray(data)) {
       return data.map((item) => this.sanitizeResponse(item));
     }

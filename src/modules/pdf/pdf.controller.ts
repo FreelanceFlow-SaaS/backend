@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Req, Res, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiBearerAuth,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RouteUserThrottlerGuard } from '../../common/throttler/route-user-throttler.guard';
 import { PdfService } from './pdf.service';
 
 @ApiTags('PDF')
@@ -19,6 +21,8 @@ export class PdfController {
   constructor(private readonly pdfService: PdfService) {}
 
   @Get('invoices/:id')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  @UseGuards(RouteUserThrottlerGuard)
   @ApiOperation({ summary: 'Télécharger une facture en PDF' })
   @ApiParam({ name: 'id', description: 'UUID de la facture' })
   @ApiProduces('application/pdf')
