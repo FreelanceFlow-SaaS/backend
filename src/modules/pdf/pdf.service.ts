@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync } from 'fs';
+import { basename, join, resolve } from 'path';
+import { LOGOS_DIR } from '../../common/upload/logo-upload.config';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 // pdfmake is a CommonJS singleton — load once at module level
@@ -76,8 +77,45 @@ export class PdfService {
     return pdfmake.createPdf(docDefinition).getBuffer();
   }
 
+  private loadLogoDataUrl(profile: any): string | null {
+    if (!profile?.logoStorageKey) return null;
+    // Use basename to prevent path traversal attacks
+    const filename = basename(profile.logoStorageKey);
+    const logoPath = resolve(join(LOGOS_DIR, filename));
+    // Confirm resolved path is still within LOGOS_DIR
+    if (!logoPath.startsWith(resolve(LOGOS_DIR))) return null;
+    if (!existsSync(logoPath)) return null;
+    try {
+      const buffer = readFileSync(logoPath);
+      // Detect MIME type from magic bytes
+      let mime: string;
+      if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+        mime = 'image/png';
+      } else if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+        mime = 'image/jpeg';
+      } else if (
+        buffer[0] === 0x52 &&
+        buffer[1] === 0x49 &&
+        buffer[2] === 0x46 &&
+        buffer[3] === 0x46 &&
+        buffer[8] === 0x57 &&
+        buffer[9] === 0x45 &&
+        buffer[10] === 0x42 &&
+        buffer[11] === 0x50
+      ) {
+        mime = 'image/webp';
+      } else {
+        return null; // unknown format — never show broken image
+      }
+      return `data:${mime};base64,${buffer.toString('base64')}`;
+    } catch {
+      return null; // silently skip broken logo — never show broken image
+    }
+  }
+
   private buildDocDefinition(invoice: any) {
     const profile = invoice.user?.profile;
+    const logoDataUrl = this.loadLogoDataUrl(profile);
     const freelancerName = profile?.displayName ?? invoice.user?.email ?? '';
     const freelancerAddress = profile
       ? [
@@ -115,11 +153,13 @@ export class PdfService {
       pageSize: 'A4',
       pageMargins: [40, 60, 40, 60],
       content: [
-        // ── Header: freelancer info + invoice title ──
+        // ── Header: logo (optional) + freelancer info + invoice title ──
         {
           columns: [
             {
               stack: [
+                // Logo: rendered only if available; silently omitted otherwise (no broken image).
+                ...(logoDataUrl ? [{ image: logoDataUrl, fit: [160, 80], marginBottom: 6 }] : []),
                 { text: freelancerName, style: 'header' },
                 { text: freelancerAddress, style: 'subtext' },
                 siret ? { text: siret, style: 'subtext' } : {},

@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { InvoiceReadCacheService } from '../../common/cache/invoice-read-cache.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreateInvoiceLineDto } from './dto/create-invoice-line.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
@@ -20,9 +22,43 @@ const INVOICE_INCLUDE = {
   client: true,
 };
 
+// ─── CSV helpers ──────────────────────────────────────────────────────────────
+
+const STATUS_FR: Record<string, string> = {
+  draft: 'Brouillon',
+  sent: 'Envoyée',
+  paid: 'Payée',
+  cancelled: 'Annulée',
+};
+
+// Replaces decimal point with comma (French locale: 1250,00).
+function decimalFr(value: string): string {
+  return value.replace('.', ',');
+}
+
+// Returns dd/MM/yyyy without relying on Node ICU locale.
+function formatDate(date: Date): string {
+  const d = date.getDate().toString().padStart(2, '0');
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  return `${d}/${m}/${date.getFullYear()}`;
+}
+
+// Quotes a CSV field if it contains the separator, quotes, or newlines.
+function csvField(value: string): string {
+  if (value.includes(';') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly invoiceReadCache: InvoiceReadCacheService,
+    @InjectPinoLogger(InvoicesService.name)
+    private readonly logger: PinoLogger
+  ) {}
 
   async create(userId: string, dto: CreateInvoiceDto) {
     const client = await this.prisma.client.findFirst({ where: { id: dto.clientId, userId } });
@@ -32,11 +68,11 @@ export class InvoicesService {
     const linesData = await this.buildLinesData(userId, dto.lines);
     const { totalHt, totalVat, totalTtc } = this.sumLines(linesData);
 
-    return this.prisma.$transaction(async (tx) => {
+    const invoice = await this.prisma.$transaction(async (tx) => {
       // Atomic counter increment — safe under concurrent requests for the same user
       const invoiceNumber = await this.generateInvoiceNumber(userId, tx);
 
-      return tx.invoice.create({
+      const created = await tx.invoice.create({
         data: {
           userId,
           clientId: dto.clientId,
@@ -54,18 +90,44 @@ export class InvoicesService {
         },
         include: INVOICE_INCLUDE,
       });
+      this.logger.info(
+        {
+          'event.action': 'invoice_created',
+          userId,
+          invoiceId: created.id,
+          invoiceNumber,
+        },
+        'invoice created'
+      );
+      return created;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, invoice.id);
+    return invoice;
   }
 
   async findAll(userId: string) {
-    return this.prisma.invoice.findMany({
-      where: { userId },
-      include: INVOICE_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-    });
+    return this.invoiceReadCache.getInvoiceList(userId, () =>
+      this.prisma.invoice.findMany({
+        where: { userId },
+        include: INVOICE_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      })
+    );
   }
 
   async findOne(id: string, userId: string) {
+    const invoice = await this.invoiceReadCache.getInvoiceDetailCacheAside(userId, id, () =>
+      this.prisma.invoice.findFirst({
+        where: { id, userId },
+        include: INVOICE_INCLUDE,
+      })
+    );
+    if (!invoice) throw new NotFoundException('Facture introuvable');
+    return invoice;
+  }
+
+  /** Authoritative read for mutations — never served from read-through cache. */
+  private async findOneFromDatabase(id: string, userId: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, userId },
       include: INVOICE_INCLUDE,
@@ -75,12 +137,12 @@ export class InvoicesService {
   }
 
   async update(id: string, userId: string, dto: UpdateInvoiceDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft) {
       throw new BadRequestException('Seules les factures en brouillon peuvent être modifiées');
     }
 
-    return this.prisma.invoice.update({
+    const updated = await this.prisma.invoice.update({
       where: { id },
       data: {
         ...(dto.issueDate && { issueDate: new Date(dto.issueDate) }),
@@ -91,10 +153,16 @@ export class InvoicesService {
       },
       include: INVOICE_INCLUDE,
     });
+    this.logger.info(
+      { 'event.action': 'invoice_updated', userId, invoiceId: id },
+      'invoice updated'
+    );
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+    return updated;
   }
 
   async updateLines(id: string, userId: string, dto: UpdateInvoiceLinesDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft) {
       throw new BadRequestException('Seules les factures en brouillon peuvent être modifiées');
     }
@@ -102,9 +170,9 @@ export class InvoicesService {
     const linesData = await this.buildLinesData(userId, dto.lines);
     const { totalHt, totalVat, totalTtc } = this.sumLines(linesData);
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       await tx.invoiceLine.deleteMany({ where: { invoiceId: id } });
-      return tx.invoice.update({
+      const inv = await tx.invoice.update({
         where: { id },
         data: {
           totalHt,
@@ -114,40 +182,126 @@ export class InvoicesService {
         },
         include: INVOICE_INCLUDE,
       });
+      this.logger.info(
+        {
+          'event.action': 'invoice_lines_updated',
+          userId,
+          invoiceId: id,
+          lineCount: linesData.length,
+        },
+        'invoice lines updated'
+      );
+      return inv;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+    return updated;
   }
 
   async updateStatus(id: string, userId: string, dto: UpdateInvoiceStatusDto) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     const allowed = ALLOWED_TRANSITIONS[invoice.status];
 
     if (!allowed.includes(dto.status)) {
+      this.logger.warn(
+        {
+          'event.action': 'invoice_status_transition_rejected',
+          userId,
+          invoiceId: id,
+          fromStatus: invoice.status,
+          toStatus: dto.status,
+        },
+        'invalid invoice status transition'
+      );
       throw new BadRequestException(
         `Transition de statut invalide: ${invoice.status} → ${dto.status}`
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.invoice.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const inv = await tx.invoice.update({
         where: { id },
-        data: { status: dto.status },
+        data: {
+          status: dto.status,
+          // Record the exact moment payment is confirmed — used as the
+          // authoritative revenue date in dashboard calculations.
+          // Guard: only set paidAt on the first paid transition; never overwrite.
+          ...(dto.status === InvoiceStatus.paid &&
+            invoice.status !== InvoiceStatus.paid && { paidAt: new Date() }),
+        },
         include: INVOICE_INCLUDE,
       });
       await tx.invoiceStatusEvent.create({
         data: { invoiceId: id, fromStatus: invoice.status, toStatus: dto.status },
       });
-      return updated;
+      this.logger.info(
+        {
+          'event.action': 'invoice_status_changed',
+          userId,
+          invoiceId: id,
+          fromStatus: invoice.status,
+          toStatus: dto.status,
+        },
+        'invoice status changed'
+      );
+      return inv;
     });
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+    return updated;
   }
 
   async remove(id: string, userId: string) {
-    const invoice = await this.findOne(id, userId);
+    const invoice = await this.findOneFromDatabase(id, userId);
     if (invoice.status !== InvoiceStatus.draft && invoice.status !== InvoiceStatus.cancelled) {
       throw new BadRequestException(
         'Seules les factures en brouillon ou annulées peuvent être supprimées'
       );
     }
     await this.prisma.invoice.delete({ where: { id } });
+    this.logger.info(
+      { 'event.action': 'invoice_deleted', userId, invoiceId: id, status: invoice.status },
+      'invoice deleted'
+    );
+    await this.invoiceReadCache.invalidateForUser(userId, id);
+  }
+
+  async exportCsv(userId: string): Promise<string> {
+    const invoices = await this.prisma.invoice.findMany({
+      where: { userId },
+      include: { client: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const headers = [
+      'Numéro',
+      'Client',
+      'Statut',
+      "Date d'émission",
+      "Date d'échéance",
+      'Total HT',
+      'Total TVA',
+      'Total TTC',
+      'Devise',
+      'Date de création',
+    ];
+
+    const rows = invoices.map((inv) => [
+      inv.invoiceNumber,
+      inv.client?.name ?? 'Client supprimé',
+      STATUS_FR[inv.status] ?? inv.status,
+      formatDate(inv.issueDate),
+      inv.dueDate ? formatDate(inv.dueDate) : '',
+      decimalFr(inv.totalHt.toFixed(2)),
+      decimalFr(inv.totalVat.toFixed(2)),
+      decimalFr(inv.totalTtc.toFixed(2)),
+      inv.currency,
+      formatDate(inv.createdAt),
+    ]);
+
+    this.logger.info(
+      { 'event.action': 'invoices_exported', userId, count: invoices.length },
+      'invoices CSV exported'
+    );
+    return [headers, ...rows].map((row) => row.map(csvField).join(';')).join('\r\n');
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
