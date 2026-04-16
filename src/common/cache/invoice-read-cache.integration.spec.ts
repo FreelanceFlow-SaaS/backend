@@ -16,6 +16,7 @@ const redisUrl = process.env.REDIS_URL?.trim();
 const describeRedis = redisUrl ? describe : describe.skip;
 
 describeRedis('InvoiceReadCacheService (Redis integration)', () => {
+  jest.setTimeout(20_000);
   let app: INestApplication;
   let invoiceReadCache: InvoiceReadCacheService;
   let raw: Redis;

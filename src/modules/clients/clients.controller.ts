@@ -61,15 +61,6 @@ export class ClientsController {
     }
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Obtenir un client par son identifiant' })
-  @ApiResponse({ status: 200, description: 'Client trouvé.' })
-  @ApiResponse({ status: 401, description: 'Non autorisé.' })
-  @ApiResponse({ status: 404, description: 'Client introuvable.' })
-  async findOne(@Request() req: any, @Param('id') id: string) {
-    return this.clientsService.findOne(id, req.user.id);
-  }
-
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour un client' })
   @ApiResponse({ status: 200, description: 'Client mis à jour.' })
@@ -88,5 +79,15 @@ export class ClientsController {
   @ApiResponse({ status: 404, description: 'Client introuvable.' })
   async remove(@Request() req: any, @Param('id') id: string) {
     return this.clientsService.remove(id, req.user.id);
+  }
+
+  /** Declared after static paths (`export`) and mutating `:id` routes to avoid any router ordering edge cases. */
+  @Get(':id')
+  @ApiOperation({ summary: 'Obtenir un client par son identifiant' })
+  @ApiResponse({ status: 200, description: 'Client trouvé.' })
+  @ApiResponse({ status: 401, description: 'Non autorisé.' })
+  @ApiResponse({ status: 404, description: 'Client introuvable.' })
+  async findOne(@Request() req: any, @Param('id') id: string) {
+    return this.clientsService.findOne(id, req.user.id);
   }
 }
