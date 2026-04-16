@@ -20,14 +20,17 @@ export class RedisHealthIndicator extends HealthIndicator {
       return this.getStatus(key, true, { message: 'Redis not configured (check skipped)' });
     }
 
+    // `lazyConnect` + explicit `connect()` avoids racing `PING` before the TCP stream is
+    // writable; with `enableOfflineQueue: false` that race throws "Stream isn't writeable...".
     const client = new Redis(url, {
       connectTimeout: 2000,
       maxRetriesPerRequest: 1,
       retryStrategy: () => undefined,
-      enableOfflineQueue: false,
+      lazyConnect: true,
     });
 
     try {
+      await client.connect();
       const pong = await client.ping();
       if (pong !== 'PONG') {
         throw new Error(`Unexpected PING response: ${String(pong)}`);
