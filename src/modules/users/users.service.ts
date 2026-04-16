@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { existsSync, readFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { createReadStream, existsSync, readFileSync, unlinkSync } from 'fs';
+import { extname, join } from 'path';
 import sharp from 'sharp';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -17,6 +17,13 @@ import {
 } from '../../common/upload/logo-upload.config';
 
 const USER_WITH_PROFILE = { profile: true } as const;
+
+const LOGO_EXT_TO_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+};
 
 @Injectable()
 export class UsersService {
@@ -157,5 +164,34 @@ export class UsersService {
     );
 
     return { logoStorageKey };
+  }
+
+  /**
+   * Stream du fichier logo pour GET (affichage navigateur / balise img).
+   * Le nom de fichier attendu sur disque est `{userId}{ext}` (cf. multer), ce qui évite la lecture hors du répertoire logos.
+   */
+  async getLogoStream(
+    userId: string
+  ): Promise<{ stream: ReturnType<typeof createReadStream>; mimeType: string }> {
+    const profile = await this.prisma.freelancerProfile.findUnique({
+      where: { userId },
+      select: { logoStorageKey: true },
+    });
+    if (!profile?.logoStorageKey) {
+      throw new NotFoundException('Aucun logo enregistré.');
+    }
+    const relative = profile.logoStorageKey.replace(/^logos\//, '');
+    const ext = extname(relative).toLowerCase();
+    if (!LOGO_EXT_TO_MIME[ext] || relative !== `${userId}${ext}`) {
+      throw new NotFoundException('Logo invalide.');
+    }
+    const filePath = join(LOGOS_DIR, relative);
+    if (!existsSync(filePath)) {
+      throw new NotFoundException('Fichier logo introuvable.');
+    }
+    return {
+      stream: createReadStream(filePath),
+      mimeType: LOGO_EXT_TO_MIME[ext],
+    };
   }
 }

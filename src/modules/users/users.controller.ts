@@ -9,6 +9,8 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  StreamableFile,
+  Header,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
@@ -18,6 +20,7 @@ import {
   ApiResponse,
   ApiConsumes,
   ApiBody,
+  ApiProduces,
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { UpdateFreelancerProfileDto } from './dto/update-freelancer-profile.dto';
@@ -83,5 +86,19 @@ export class UsersController {
       throw new BadRequestException('Aucun fichier reçu. Champ attendu : "logo".');
     }
     return this.usersService.uploadLogo(req.user.id, file);
+  }
+
+  @Get('profile/logo')
+  @ApiOperation({ summary: 'Récupérer le logo (affichage)' })
+  @ApiProduces('image/png', 'image/jpeg', 'image/webp')
+  @ApiResponse({ status: 200, description: 'Flux image du logo (Content-Disposition: inline).' })
+  @ApiResponse({ status: 404, description: 'Aucun logo ou fichier absent.' })
+  @Header('Cache-Control', 'private, max-age=3600')
+  async getProfileLogo(@Request() req: any): Promise<StreamableFile> {
+    const { stream, mimeType } = await this.usersService.getLogoStream(req.user.id);
+    return new StreamableFile(stream, {
+      type: mimeType,
+      disposition: 'inline; filename="logo"',
+    });
   }
 }
